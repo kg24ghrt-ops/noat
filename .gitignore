@@ -22,3 +22,7 @@ captures/
 .cxx/
 google-services.json
 vcs.xml
+
+# Kotlin and Gradle generated state
+.kotlin/
+.gradle/
