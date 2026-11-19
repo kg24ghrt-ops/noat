@@ -1,3 +1,4 @@
+
 name: Android CI
 
 on:
@@ -37,28 +38,18 @@ jobs:
         with:
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
-          packages: ''
-
-      - name: Accept licenses and install Android packages
-        shell: bash
-        run: |
-          printf 'y\n%.0s' {1..100} | sdkmanager --licenses
-          sdkmanager --install \\
-            "platform-tools" \\
-            "platforms;android-36" \\
-            "build-tools;36.0.0" \\
-            "ndk;30.0.16248370" \\
-            "cmake;3.31.6"
+          packages: >-
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;30.0.16248370
+            cmake;3.31.6
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
       - name: Run unit tests and build APKs
-        run: |
-          ./gradlew --no-daemon \\
-            testDebugUnitTest \\
-            assembleDebug \\
-            assembleRelease
+        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug assembleRelease
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v6
