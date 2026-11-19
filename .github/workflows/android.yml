@@ -41,7 +41,6 @@ jobs:
           packages: >-
             platform-tools
             platforms;android-36
-            platforms;android-37
             build-tools;36.0.0
             ndk;30.0.16248370
             cmake;3.31.6
