@@ -41,14 +41,40 @@ jobs:
           packages: >-
             platform-tools
             platforms;android-36
+            platforms;android-37
             build-tools;36.0.0
             ndk;30.0.16248370
             cmake;3.31.6
+
+      - name: Validate release signing secrets
+        if: github.event_name != 'pull_request'
+        run: |
+          missing=()
+          [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ] && missing+=("ANDROID_KEYSTORE_BASE64")
+          [ -z "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" ] && missing+=("ANDROID_KEYSTORE_PASSWORD")
+          [ -z "${{ secrets.ANDROID_KEY_ALIAS }}" ] && missing+=("ANDROID_KEY_ALIAS")
+          [ -z "${{ secrets.ANDROID_KEY_PASSWORD }}" ] && missing+=("ANDROID_KEY_PASSWORD")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Error: Required signing secrets are missing for ${{ github.event_name }}: ${missing[*]}"
+            echo "Configure these repository secrets to enable signed release builds."
+            exit 1
+          fi
+
+      - name: Prepare release keystore
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/noat-release.jks"
+          chmod 600 "$RUNNER_TEMP/noat-release.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/noat-release.jks" >> "$GITHUB_ENV"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
       - name: Run unit tests and build APKs
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew --no-daemon testDebugUnitTest assembleDebug assembleRelease
 
       - name: Upload APK artifacts

@@ -31,6 +31,37 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            val storeFile = System.getenv("ANDROID_KEYSTORE_FILE")
+            val storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+            val keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+
+            val descriptors = listOf(
+                storeFile to "ANDROID_KEYSTORE_FILE",
+                storePassword to "ANDROID_KEYSTORE_PASSWORD",
+                keyAlias to "ANDROID_KEY_ALIAS",
+                keyPassword to "ANDROID_KEY_PASSWORD"
+            )
+            val present = descriptors.filter { it.first.isNotBlank() }
+            if (present.isNotEmpty() && present.size < descriptors.size) {
+                throw GradleException(
+                    "Incomplete Android release signing credentials. " +
+                        "Missing: " +
+                        descriptors.filter { it.first.isBlank() }.map { it.second }.joinToString(", ")
+                )
+            }
+
+            if (present.size == descriptors.size) {
+                this.storeFile = file(storeFile)
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -38,6 +69,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            val signingCredentialsComplete = listOf(
+                "ANDROID_KEYSTORE_FILE",
+                "ANDROID_KEYSTORE_PASSWORD",
+                "ANDROID_KEY_ALIAS",
+                "ANDROID_KEY_PASSWORD"
+            ).all { System.getenv(it).isNotBlank() }
+            if (signingCredentialsComplete) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
