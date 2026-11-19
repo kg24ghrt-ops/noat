@@ -83,8 +83,8 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.2.2")
 
     implementation("androidx.activity:activity-ktx:1.13.0")
-    implementation("androidx.lifecycle:lifecycle-runtime:2.11.1")
-implementation("androidx.lifecycle:lifecycle-viewmodel:2.11.1")
+    implementation("androidx.lifecycle:lifecycle-runtime:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel:2.11.0")
 
     testImplementation("junit:junit:4.13.2")
 
