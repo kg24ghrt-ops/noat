@@ -14,7 +14,6 @@ set(VULKAN_ENGINE_SRC
 
 set(VULKAN_ENGINE_HDR
     context.h
-    swapchain.h
     renderpass.h
     pipeline.h
     resources.h
