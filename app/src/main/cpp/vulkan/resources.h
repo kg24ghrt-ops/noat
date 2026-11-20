@@ -14,8 +14,7 @@ public:
     VulkanResources& operator=(const VulkanResources&) = delete;
 
     bool init(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool,
-              VkQueue queue, VkDescriptorSetLayout descriptorSetLayout,
-              uint32_t swapchainImageCount);
+              VkQueue queue, uint32_t swapchainImageCount);
     void shutdown();
 
     VkDescriptorSetLayout descriptorSetLayout() const { return descriptorSetLayout_; }

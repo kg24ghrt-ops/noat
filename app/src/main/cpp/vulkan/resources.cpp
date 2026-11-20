@@ -12,13 +12,11 @@ VulkanResources::~VulkanResources() {
 }
 
 bool VulkanResources::init(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool commandPool,
-                           VkQueue queue, VkDescriptorSetLayout descriptorSetLayout,
-                           uint32_t swapchainImageCount) {
+                           VkQueue queue, uint32_t swapchainImageCount) {
     device_ = device;
     physicalDevice_ = physicalDevice;
     commandPool_ = commandPool;
     queue_ = queue;
-    descriptorSetLayout_ = descriptorSetLayout;
     swapchainImageCount_ = swapchainImageCount;
 
     if (!createDescriptorSetLayout()) return false;

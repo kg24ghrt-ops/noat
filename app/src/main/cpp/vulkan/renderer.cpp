@@ -9,6 +9,7 @@
 #include <android/log.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
+#include <array>
 
 #define TAG "PaperRenderer"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -52,7 +53,7 @@ bool PaperRenderer::init(void* nativeWindow) {
     resources_ = std::make_unique<VulkanResources>();
     uint32_t imageCount = static_cast<uint32_t>(context_->swapchainImages().size());
     if (!resources_->init(context_->device(), context_->physicalDevice(), commandPool_,
-                          context_->graphicsQueue(), resources_->descriptorSetLayout(), imageCount)) {
+                          context_->graphicsQueue(), imageCount)) {
         LOGE("Failed to create resources");
         return false;
     }
@@ -242,36 +243,40 @@ void PaperRenderer::renderFrame() {
     vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     // Geometry subpass (subpass 0)
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->geometryPipeline());
+    if (pipeline_->geometryPipeline() != VK_NULL_HANDLE) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->geometryPipeline());
 
-    VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = static_cast<float>(context_->width());
-    viewport.height = static_cast<float>(context_->height());
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(context_->width());
+        viewport.height = static_cast<float>(context_->height());
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = renderPassInfo.renderArea.extent;
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = renderPassInfo.renderArea.extent;
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    // Bind descriptor sets
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->pipelineLayout(),
-                            0, 1, &resources_->descriptorSets()[currentFrame_], 0, nullptr);
+        // Bind descriptor sets
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->pipelineLayout(),
+                                0, 1, &resources_->descriptorSets()[currentFrame_], 0, nullptr);
 
-    // Draw paper (3 vertices for a full-screen triangle, no index buffer needed)
-    vkCmdDraw(cmd, 3, 1, 0, 0);
+        // Draw paper (3 vertices for a full-screen triangle, no index buffer needed)
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+    }
 
     // Next subpass: Lighting (subpass 1)
     vkCmdNextSubpass(cmd, VK_SUBPASS_CONTENTS_INLINE);
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->lightingPipeline());
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->pipelineLayout(),
-                            0, 1, &resources_->descriptorSets()[currentFrame_], 0, nullptr);
-    vkCmdDraw(cmd, 3, 1, 0, 0);
+    if (pipeline_->lightingPipeline() != VK_NULL_HANDLE) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->lightingPipeline());
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->pipelineLayout(),
+                                0, 1, &resources_->descriptorSets()[currentFrame_], 0, nullptr);
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+    }
 
     vkCmdEndRenderPass(cmd);
 
