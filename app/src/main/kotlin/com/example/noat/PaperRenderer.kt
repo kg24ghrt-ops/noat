@@ -97,6 +97,8 @@ class PaperRenderer : GLSurfaceView.Renderer {
         val hasFramebufferFetch = extensions.contains("GL_ARM_shader_framebuffer_fetch")
 
         // Initialize native engine with capabilities
+        // paperInit() creates the PaperRenderer instance; paperInitWithCaps() configures it
+        paperLib.paperInit()
         paperLib.paperInitWithCaps(
             esMajor, esMinor,
             glslMajor, glslMinor,
