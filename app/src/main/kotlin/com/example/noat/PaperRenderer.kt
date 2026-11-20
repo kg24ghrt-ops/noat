@@ -35,8 +35,14 @@ class PaperRenderer : GLSurfaceView.Renderer {
     private val paperColor = FloatArray(3)
 
     override fun onSurfaceCreated(gl: GL10, config: EGLConfig) {
+        // Helper to safely convert glGetString results (can return null on some contexts)
+        fun glString(name: Int): String {
+            val v = GLES30.glGetString(name)
+            return if (v == null) "" else v.toString()
+        }
+
         // Query OpenGL ES capabilities from the active context
-        val versionStr = GLES30.glGetString(GLES30.GL_VERSION).toString()
+        val versionStr = glString(GLES30.GL_VERSION)
         var esMajor = 3
         var esMinor = 0
         val esIdx = versionStr.indexOf("OpenGL ES ")
@@ -50,7 +56,7 @@ class PaperRenderer : GLSurfaceView.Renderer {
             }
         }
 
-        val glslStr = GLES30.glGetString(GLES30.GL_SHADING_LANGUAGE_VERSION).toString()
+        val glslStr = glString(GLES30.GL_SHADING_LANGUAGE_VERSION)
         var glslMajor = 3
         var glslMinor = 0
         val glslIdx = glslStr.indexOf("OpenGL ES GLSL ES ")
@@ -64,10 +70,10 @@ class PaperRenderer : GLSurfaceView.Renderer {
             }
         }
 
-        val rendererStr = GLES30.glGetString(GLES30.GL_RENDERER).toString()
-        val vendorStr = GLES30.glGetString(GLES30.GL_VENDOR).toString()
-        val versionFullStr = GLES30.glGetString(GLES30.GL_VERSION).toString()
-        val glslFullStr = GLES30.glGetString(GLES30.GL_SHADING_LANGUAGE_VERSION).toString()
+        val rendererStr = glString(GLES30.GL_RENDERER)
+        val vendorStr = glString(GLES30.GL_VENDOR)
+        val versionFullStr = glString(GLES30.GL_VERSION)
+        val glslFullStr = glString(GLES30.GL_SHADING_LANGUAGE_VERSION)
 
         val isMali = rendererStr.contains("Mali", ignoreCase = true)
 
@@ -83,7 +89,7 @@ class PaperRenderer : GLSurfaceView.Renderer {
         GLES30.glGetIntegerv(GLES30.GL_MAX_DRAW_BUFFERS, maxDrawBuffers, 0)
 
         // Extension checks
-        val extensions = GLES30.glGetString(GLES30.GL_EXTENSIONS).toString()
+        val extensions = glString(GLES30.GL_EXTENSIONS)
         val hasTessellation = extensions.contains("GL_OES_tessellation_shader") || esMinor >= 2
         val hasComputeShader = extensions.contains("GL_OES_compute_shader") || esMinor >= 1
         val hasAstc = extensions.contains("GL_COMPRESSED_RGBA_ASTC_4x4_KHR") || esMinor >= 2
