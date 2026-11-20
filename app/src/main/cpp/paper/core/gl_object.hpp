@@ -189,28 +189,28 @@ private:
 };
 
 // EGL context RAII wrapper
-class EGLContext {
+class PaperEGLContext {
 public:
-    EGLContext() : display_(EGL_NO_DISPLAY), context_(EGL_NO_CONTEXT), surface_(EGL_NO_SURFACE) {}
+    PaperEGLContext() : display_(EGL_NO_DISPLAY), context_(EGL_NO_CONTEXT), surface_(EGL_NO_SURFACE) {}
 
-    EGLContext(EGLDisplay display, EGLContext context, EGLSurface surface)
+    PaperEGLContext(EGLDisplay display, EGLContext context, EGLSurface surface)
         : display_(display), context_(context), surface_(surface) {}
 
-    ~EGLContext() {
+    ~PaperEGLContext() {
         destroy();
     }
 
-    EGLContext(const EGLContext&) = delete;
-    EGLContext& operator=(const EGLContext&) = delete;
+    PaperEGLContext(const PaperEGLContext&) = delete;
+    PaperEGLContext& operator=(const PaperEGLContext&) = delete;
 
-    EGLContext(EGLContext&& other) noexcept
+    PaperEGLContext(PaperEGLContext&& other) noexcept
         : display_(other.display_), context_(other.context_), surface_(other.surface_) {
         other.display_ = EGL_NO_DISPLAY;
         other.context_ = EGL_NO_CONTEXT;
         other.surface_ = EGL_NO_SURFACE;
     }
 
-    EGLContext& operator=(EGLContext&& other) noexcept {
+    PaperEGLContext& operator=(PaperEGLContext&& other) noexcept {
         if (this != &other) {
             destroy();
             display_ = other.display_;
