@@ -45,20 +45,18 @@ android {
                 "ANDROID_KEY_PASSWORD" to keyPassword
             )
 
-            val missing = envVars.filter { (it.value ?: "").isBlank() }.map { it.key }
-            if (missing.isNotEmpty() && missing.size < envVars.size) {
-                throw GradleException(
-                    "Incomplete Android release signing credentials. Missing: " +
-                        missing.joinToString(", ")
-                )
-            }
+            val allPresent = envVars.all { (it.value ?: "").isNotBlank() }
 
-            if (missing.isEmpty()) {
+            if (allPresent) {
                 this.storeFile = file(storeFile!!)
                 this.storePassword = storePassword!!
                 this.keyAlias = keyAlias!!
                 this.keyPassword = keyPassword!!
             }
+            // When credentials are incomplete (e.g. PRs without signing secrets),
+            // leave signingConfig unset so the release build is unsigned.
+            // The workflow's validation step fails clearly on push/main when
+            // secrets are missing.
         }
     }
 
