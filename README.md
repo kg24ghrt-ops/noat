@@ -1,8 +1,8 @@
 # NOAT
 
 An Android application built with Kotlin, XML layouts, and native C++17 modules.
-Includes a photorealistic paper-rendering engine (OpenGL ES 3.0–3.2) integrated
-via JNI and rendered through a `GLSurfaceView`.
+Includes a photorealistic paper-rendering engine (Vulkan) integrated via JNI and
+rendered through a `SurfaceView`.
 
 ## Project toolchain
 
@@ -16,6 +16,7 @@ via JNI and rendered through a `GLSurfaceView`.
 - NDK: 30.0.16248370
 - CMake: 3.31.6
 - Native C++ standard: C++17
+- Graphics API: Vulkan 1.1 (via Android NDK)
 
 ## Build policy
 
@@ -38,39 +39,37 @@ The release APK is unsigned until signing repository secrets are configured.
 ## Native libraries
 
 - `native-lib` — existing JNI stub (`stringFromJNI`), unchanged.
-- `paper-engine` — photorealistic paper rendering engine (C++17, OpenGL ES 3.0–3.2).
+- `paper-engine` — photorealistic paper rendering engine (C++17, Vulkan 1.1).
 
-## Paper rendering engine
+## Paper rendering engine (Vulkan)
 
 The paper engine is a GPU-accelerated renderer for physically convincing paper
-surfaces, optimized for ARM Mali GPUs (tile-based deferred rendering).
+surfaces, optimized for ARM Mali GPUs using Vulkan's explicit render pass and
+subpass architecture.
 
 ### Architecture
 
-- **Tier A (GLES 3.0 baseline)** — CPU-subdivided paper geometry, normal mapping,
-  forward rendering, dielectric paper shading model. Works on all devices.
-- **Tier B (GLES 3.1)** — compute shader procedural texture generation
-  (fiber/grain textures), enabled when available.
-- **Tier C (GLES 3.2)** — hardware tessellation + displacement. Opt-in only;
-  disabled by default per Arm Mali guidance (tessellation is bandwidth-expensive
-  on tile-based GPUs).
+- **Vulkan 1.1** with `VK_KHR_android_surface` for Android window integration
+- **Two-subpass render pass**:
+  - Subpass 0 (Geometry): Renders paper surface to color + normal + depth attachments
+  - Subpass 1 (Lighting): Reads G-buffer attachments as input attachments (kept in tile memory on Mali GPUs), applies lighting, outputs to swapchain
+- **Subpass dependencies** with `VK_DEPENDENCY_BY_REGION_BIT` for fine-grained tile-local synchronization
+- **Explicit load/store ops**: `LOAD_OP_CLEAR`/`STORE_OP_DONT_CARE` for transient G-buffer attachments to minimize external memory bandwidth
 
-### Mali-specific optimizations
+### Mali-specific optimizations (Vulkan)
 
-- ASTC texture compression preferred (ETC2 fallback).
-- Transient framebuffer attachments invalidated each frame (`glInvalidateFramebuffer`).
-- No depth prepass (Arm recommends against on Mali).
-- `mediump` precision for colors/lighting, `highp` for positions.
-- Render passes organized to minimize external memory bandwidth.
+- Subpass input attachments keep intermediate data in on-chip tile memory (no external memory round-trip)
+- Transient attachments (`VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT`) with lazily allocated memory where possible
+- `STORE_OP_DONT_CARE` for G-buffer attachments that don't need to persist
+- No hardware tessellation (bandwidth-expensive on tile-based GPUs per Arm guidance)
 
 ### Rendering features
 
-- Flat, curved, and edge-curled paper geometry with adaptive subdivision.
-- Procedural fiber normals and surface grain (procedural noise).
-- Paper-specific dielectric shading (diffuse + low specular + ambient + edge darkening).
+- Paper surface rendering with procedural fiber normals and surface grain
+- Paper-specific dielectric shading (diffuse + low specular + ambient + edge darkening)
 - Multiple paper material presets (notebook, premium, printer, recycled,
-  watercolor, cotton, handmade, rough, parchment).
-- OpenGL ES capability detection at runtime (never assumes features exist).
+  watercolor, cotton, handmade, rough, parchment)
+- Quality levels: Low, Balanced, High, Ultra
 
 ## Application details
 
@@ -78,7 +77,7 @@ surfaces, optimized for ARM Mali GPUs (tile-based deferred rendering).
 - Namespace: `com.example.noat`
 - Native libraries: `native-lib`, `paper-engine`
 - C++ standard: C++17
-- GLSurfaceView: `com.example.noat.PaperRenderer`
+- Surface: `SurfaceView` + Vulkan (`com.example.noat.PaperRenderer` via JNI)
 
 ## Git workflow
 

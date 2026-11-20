@@ -24,4 +24,4 @@ target_link_libraries(
     ${log-lib}
 )
 
-add_subdirectory(paper)
+add_subdirectory(vulkan)

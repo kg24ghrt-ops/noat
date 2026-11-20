@@ -3,7 +3,7 @@
 #include <array>
 #include <string>
 
-// Paper material categories. Each has physically inspired parameters.
+// Paper material categories.
 enum class PaperType {
     StandardNotebook,   // everyday notebook paper
     PremiumWriting,     // high-quality writing paper
@@ -18,25 +18,12 @@ enum class PaperType {
 
 // Material parameter set for a specific paper type.
 struct PaperMaterialParams {
-    // Base paper color (albedo) - off-white to yellowed
     float color[3] = {0.95f, 0.95f, 0.90f};
-
-    // Surface roughness (0 = smooth, 1 = very rough)
     float roughness = 0.35f;
-
-    // Specular strength - paper is mostly diffuse (low specular)
-    float specular_strength = 0.10f;
-
-    // Specular roughness (microfacet distribution)
-    float specular_roughness = 0.60f;
-
-    // Fiber detail strength (normal map intensity)
-    float fiber_strength = 0.50f;
-
-    // Grain scale for texture tiling
-    float grain_scale = 1.0f;
-
-    // Paper thickness approximation (for edge darkening)
+    float specularStrength = 0.10f;
+    float specularRoughness = 0.60f;
+    float fiberStrength = 0.50f;
+    float grainScale = 1.0f;
     float thickness = 0.10f;
 };
 

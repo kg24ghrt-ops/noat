@@ -7,9 +7,9 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <!-- Paper rendering surface (full screen, behind other views) -->
-    <android.opengl.GLSurfaceView
-        android:id="@+id/paper_surface"
+    <!-- Vulkan rendering surface (full screen, behind other views) -->
+    <SurfaceView
+        android:id="@+id/vulkan_surface"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:layout_constraintBottom_toBottomOf="parent"

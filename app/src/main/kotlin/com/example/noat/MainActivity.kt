@@ -1,20 +1,21 @@
 package com.example.noat
 
 import android.os.Bundle
-import android.opengl.GLSurfaceView
-import android.widget.TextView
+import android.view.Surface
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import androidx.appcompat.app.AppCompatActivity
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.example.noat.R
+import android.widget.TextView
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
 
-    private lateinit var paperSurface: GLSurfaceView
-    private lateinit var paperRenderer: PaperRenderer
+    private lateinit var vulkanSurface: SurfaceView
     private val paperLib = PaperLib()
     private var currentPaperIndex = 0
 
@@ -38,17 +39,9 @@ class MainActivity : AppCompatActivity() {
             windowInsets
         }
 
-        // Initialize paper rendering surface
-        paperSurface = findViewById(R.id.paper_surface)
-        paperRenderer = PaperRenderer()
-
-        // Surface renders as a normal view in the hierarchy (behind TextView/FAB)
-        paperSurface.setZOrderOnTop(false)
-        paperSurface.setEGLContextClientVersion(3)
-        paperSurface.setEGLConfigChooser(8, 8, 8, 8, 0, 0)
-        paperSurface.setRenderer(paperRenderer)
-        paperSurface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY)
-        paperSurface.background = null
+        // Initialize Vulkan rendering surface
+        vulkanSurface = findViewById(R.id.vulkan_surface)
+        vulkanSurface.holder.addCallback(this)
 
         // Show engine info in the TextView
         val textView = findViewById<TextView>(R.id.textView)
@@ -69,18 +62,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // SurfaceHolder.Callback
+
+    override fun surfaceCreated(holder: SurfaceHolder) {
+        val surface = holder.surface
+        if (surface.isValid) {
+            paperLib.paperInitWithSurface(surface)
+        }
+    }
+
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        paperLib.paperResize(width, height)
+    }
+
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
+        paperLib.paperShutdown()
+    }
+
     override fun onPause() {
         super.onPause()
-        paperSurface.onPause()
     }
 
     override fun onResume() {
         super.onResume()
-        paperSurface.onResume()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        paperRenderer.release()
+        paperLib.paperShutdown()
     }
 }
