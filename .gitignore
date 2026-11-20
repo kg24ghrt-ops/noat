@@ -26,3 +26,6 @@ vcs.xml
 # Kotlin and Gradle generated state
 .kotlin/
 .gradle/
+noat-release.jks
+noat-release-fixed.jks
+.noat-release-password

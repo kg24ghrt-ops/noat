@@ -1,6 +1,7 @@
 package com.example.noat
 
 import android.os.Bundle
+import android.opengl.GLSurfaceView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -10,6 +11,10 @@ import com.example.noat.R
 import android.widget.TextView
 
 class MainActivity : AppCompatActivity() {
+
+    private lateinit var paperSurface: GLSurfaceView
+    private lateinit var paperRenderer: PaperRenderer
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -30,9 +35,35 @@ class MainActivity : AppCompatActivity() {
             windowInsets
         }
 
+        // Initialize paper rendering surface
+        paperSurface = findViewById(R.id.paper_surface)
+        paperRenderer = PaperRenderer()
 
+        // Allow the surface to be composited behind other views (TextView, FAB)
+        paperSurface.setZOrderMediaOverlay(true)
+        paperSurface.setEGLConfigChooser(8, 8, 8, 8, 0, 0)
+        paperSurface.renderer = paperRenderer
+        paperSurface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY)
 
-        val nativeMessage = NativeLib().stringFromJNI()
-        findViewById<TextView>(R.id.textView).text = nativeMessage
+        // Show engine info in the TextView
+        val textView = findViewById<TextView>(R.id.textView)
+        // Info will be populated after surface creation via a callback
+        // For now, show app name; the native message is available via paperGetInfo
+        textView.text = getString(R.string.app_name)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        paperSurface.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        paperSurface.onResume()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        paperRenderer.release()
     }
 }

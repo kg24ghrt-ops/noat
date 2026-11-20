@@ -38,26 +38,26 @@ android {
             val keyAlias = System.getenv("ANDROID_KEY_ALIAS")
             val keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
 
-            val descriptors = listOf(
-                storeFile to "ANDROID_KEYSTORE_FILE",
-                storePassword to "ANDROID_KEYSTORE_PASSWORD",
-                keyAlias to "ANDROID_KEY_ALIAS",
-                keyPassword to "ANDROID_KEY_PASSWORD"
+            val envVars = mapOf(
+                "ANDROID_KEYSTORE_FILE" to storeFile,
+                "ANDROID_KEYSTORE_PASSWORD" to storePassword,
+                "ANDROID_KEY_ALIAS" to keyAlias,
+                "ANDROID_KEY_PASSWORD" to keyPassword
             )
-            val present = descriptors.filter { it.first.isNotBlank() }
-            if (present.isNotEmpty() && present.size < descriptors.size) {
+
+            val missing = envVars.filter { (it.value ?: "").isBlank() }.map { it.key }
+            if (missing.isNotEmpty() && missing.size < envVars.size) {
                 throw GradleException(
-                    "Incomplete Android release signing credentials. " +
-                        "Missing: " +
-                        descriptors.filter { it.first.isBlank() }.map { it.second }.joinToString(", ")
+                    "Incomplete Android release signing credentials. Missing: " +
+                        missing.joinToString(", ")
                 )
             }
 
-            if (present.size == descriptors.size) {
-                this.storeFile = file(storeFile)
-                this.storePassword = storePassword
-                this.keyAlias = keyAlias
-                this.keyPassword = keyPassword
+            if (missing.isEmpty()) {
+                this.storeFile = file(storeFile!!)
+                this.storePassword = storePassword!!
+                this.keyAlias = keyAlias!!
+                this.keyPassword = keyPassword!!
             }
         }
     }
@@ -74,7 +74,7 @@ android {
                 "ANDROID_KEYSTORE_PASSWORD",
                 "ANDROID_KEY_ALIAS",
                 "ANDROID_KEY_PASSWORD"
-            ).all { System.getenv(it).isNotBlank() }
+            ).all { System.getenv(it)?.isNotBlank() == true }
             if (signingCredentialsComplete) {
                 signingConfig = signingConfigs.getByName("release")
             }
