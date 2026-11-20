@@ -42,11 +42,12 @@ class MainActivity : AppCompatActivity() {
         paperSurface = findViewById(R.id.paper_surface)
         paperRenderer = PaperRenderer()
 
-        // Allow the surface to be composited behind other views (TextView, FAB)
-        paperSurface.setZOrderMediaOverlay(true)
+        // Surface renders as a normal view in the hierarchy (behind TextView/FAB)
+        paperSurface.setZOrderOnTop(false)
         paperSurface.setEGLConfigChooser(8, 8, 8, 8, 0, 0)
         paperSurface.setRenderer(paperRenderer)
         paperSurface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY)
+        paperSurface.background = null
 
         // Show engine info in the TextView
         val textView = findViewById<TextView>(R.id.textView)

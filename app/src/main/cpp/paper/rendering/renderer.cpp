@@ -352,6 +352,8 @@ void PaperRenderer::renderGeometryPass() {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
+    // Clear to a visible paper-like color (off-white)
+    glClearColor(0.95f, 0.95f, 0.90f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     paper_program_->use();
