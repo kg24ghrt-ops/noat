@@ -108,13 +108,13 @@ const char* kCompositeVertexShader = R"""(
 precision highp float;
 
 layout(location = 0) in vec3 a_position;
-layout(location = 2) in vec2 a_texcoord;
+layout(location = 1) in vec2 a_texcoord;
 
 out vec2 v_texcoord;
 
 void main() {
     v_texcoord = a_texcoord;
-    gl_Position = vec4(a_position * 2.0 - 1.0, 0.0, 1.0);
+    gl_Position = vec4(a_position, 0.0, 1.0);
 }
 )""";
 
@@ -367,13 +367,13 @@ void PaperRenderer::renderGeometryPass() {
     float view[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
     paper_program_->setUniformMatrix4fv("u_view", view);
 
-    // Projection matrix (orthographic for paper)
+    // Projection matrix (orthographic, paper at z=0 maps to NDC z=0)
     float aspect = (viewport_height_ > 0) ?
         static_cast<float>(viewport_width_) / static_cast<float>(viewport_height_) : 1.0f;
     float proj[16] = {
         1.0f/aspect, 0, 0, 0,
         0, 1.0f, 0, 0,
-        0, 0, -1.0f, -1.0f,
+        0, 0, -1.0f, 0,
         0, 0, 0, 1.0f
     };
     paper_program_->setUniformMatrix4fv("u_projection", proj);
