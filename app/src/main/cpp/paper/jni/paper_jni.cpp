@@ -25,6 +25,7 @@ extern "C" {
 
 JNIEXPORT void JNICALL
 Java_com_example_noat_PaperLib_paperInit(JNIEnv* env, jobject /* thiz */) {
+    (void)env;
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
     if (g_renderer) {
         LOGW("Paper engine already initialized");
@@ -121,6 +122,7 @@ Java_com_example_noat_PaperLib_paperInitWithCaps(JNIEnv* env, jobject /* thiz */
 
 JNIEXPORT void JNICALL
 Java_com_example_noat_PaperLib_paperSetQuality(JNIEnv* env, jobject /* thiz */, jint quality) {
+    (void)env;
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
     if (!g_renderer) return;
 
@@ -148,6 +150,7 @@ Java_com_example_noat_PaperLib_paperSetLight(JNIEnv* env, jobject /* thiz */,
                                               jfloat intensity, jfloat ambient,
                                               jfloat env_r, jfloat env_g, jfloat env_b,
                                               jfloat env_intensity) {
+    (void)env;
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
     if (!g_renderer) return;
 
@@ -178,6 +181,8 @@ Java_com_example_noat_PaperLib_paperSetMaterial(JNIEnv* env, jobject /* thiz */,
                                                  jfloat fiber_strength,
                                                  jfloat grain_scale,
                                                  jfloat thickness) {
+    (void)env;
+    (void)paper_type;
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
     if (!g_renderer) return;
 
@@ -198,6 +203,7 @@ Java_com_example_noat_PaperLib_paperSetMaterial(JNIEnv* env, jobject /* thiz */,
 JNIEXPORT void JNICALL
 Java_com_example_noat_PaperLib_paperResize(JNIEnv* env, jobject /* thiz */,
                                             jint width, jint height) {
+    (void)env;
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
     if (!g_renderer) return;
     g_renderer->resize(static_cast<GLsizei>(width), static_cast<GLsizei>(height));
@@ -205,6 +211,7 @@ Java_com_example_noat_PaperLib_paperResize(JNIEnv* env, jobject /* thiz */,
 
 JNIEXPORT void JNICALL
 Java_com_example_noat_PaperLib_paperBeginFrame(JNIEnv* env, jobject /* thiz */) {
+    (void)env;
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
     if (!g_renderer) return;
     g_renderer->beginFrame();
@@ -212,6 +219,7 @@ Java_com_example_noat_PaperLib_paperBeginFrame(JNIEnv* env, jobject /* thiz */) 
 
 JNIEXPORT void JNICALL
 Java_com_example_noat_PaperLib_paperRenderFrame(JNIEnv* env, jobject /* thiz */) {
+    (void)env;
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
     if (!g_renderer) return;
     g_renderer->renderFrame();
@@ -219,6 +227,7 @@ Java_com_example_noat_PaperLib_paperRenderFrame(JNIEnv* env, jobject /* thiz */)
 
 JNIEXPORT void JNICALL
 Java_com_example_noat_PaperLib_paperEndFrame(JNIEnv* env, jobject /* thiz */) {
+    (void)env;
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
     if (!g_renderer) return;
     g_renderer->endFrame();
@@ -240,6 +249,7 @@ Java_com_example_noat_PaperLib_paperGetInfo(JNIEnv* env, jobject /* thiz */) {
 
 JNIEXPORT void JNICALL
 Java_com_example_noat_PaperLib_paperShutdown(JNIEnv* env, jobject /* thiz */) {
+    (void)env;
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
     g_renderer.reset();
     g_initialized = false;

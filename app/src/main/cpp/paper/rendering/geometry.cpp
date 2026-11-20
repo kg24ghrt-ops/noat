@@ -3,30 +3,6 @@
 #include <cmath>
 #include <stdexcept>
 
-namespace {
-
-// Compute normal for a grid vertex based on neighboring positions
-void computeNormal(float x, float y, float z,
-                   float nx, float ny, float nz,
-                   float& out_nx, float& out_ny, float& out_nz) {
-    // Simple normalized normal (for flat surfaces, all point up)
-    out_nx = nx;
-    out_ny = ny;
-    out_nz = nz;
-    float len = std::sqrt(nx * nx + ny * ny + nz * nz);
-    if (len > 0.0f) {
-        out_nx /= len;
-        out_ny /= len;
-        out_nz /= len;
-    } else {
-        out_nx = 0.0f;
-        out_ny = 0.0f;
-        out_nz = 1.0f;
-    }
-}
-
-} // namespace
-
 Geometry makePaperPlane(GLsizei segment_x, GLsizei segment_y,
                         float width, float height) {
     if (segment_x < 1) segment_x = 1;
@@ -34,9 +10,6 @@ Geometry makePaperPlane(GLsizei segment_x, GLsizei segment_y,
 
     std::vector<Vertex> vertices;
     vertices.reserve(static_cast<size_t>((segment_x + 1) * (segment_y + 1)));
-
-    float half_w = width * 0.5f;
-    float half_h = height * 0.5f;
 
     for (GLsizei iy = 0; iy <= segment_y; ++iy) {
         float v = static_cast<float>(iy) / static_cast<float>(segment_y);
@@ -77,9 +50,6 @@ Geometry makeCurvedPaper(GLsizei segment_x, GLsizei segment_y,
 
     std::vector<Vertex> vertices;
     vertices.reserve(static_cast<size_t>((segment_x + 1) * (segment_y + 1)));
-
-    float half_w = width * 0.5f;
-    float half_h = height * 0.5f;
 
     // Cylindrical bend along the Y axis (paper curls left-right)
     // Radius controls how tight the bend is
