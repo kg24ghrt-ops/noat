@@ -86,10 +86,10 @@ Java_com_example_noat_PaperLib_paperSetLight(JNIEnv* env, jobject /* thiz */,
     light.color[2] = color_b;
     light.intensity = intensity;
     light.ambient = ambient;
-    light.env_color[0] = env_r;
-    light.env_color[1] = env_g;
-    light.env_color[2] = env_b;
-    light.env_intensity = env_intensity;
+    light.envColor[0] = env_r;
+    light.envColor[1] = env_g;
+    light.envColor[2] = env_b;
+    light.envIntensity = env_intensity;
 
     g_renderer->setLight(light);
 }
@@ -115,10 +115,10 @@ Java_com_example_noat_PaperLib_paperSetMaterial(JNIEnv* env, jobject /* thiz */,
     mat.color[1] = g;
     mat.color[2] = b;
     mat.roughness = roughness;
-    mat.specular_strength = specular_strength;
-    mat.specular_roughness = specular_roughness;
-    mat.fiber_strength = fiber_strength;
-    mat.grain_scale = grain_scale;
+    mat.specularStrength = specular_strength;
+    mat.specularRoughness = specular_roughness;
+    mat.fiberStrength = fiber_strength;
+    mat.grainScale = grain_scale;
     mat.thickness = thickness;
 
     g_renderer->setMaterial(mat);

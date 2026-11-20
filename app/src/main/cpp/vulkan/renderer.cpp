@@ -149,8 +149,8 @@ void PaperRenderer::renderFrame() {
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
     // Wait for previous frame to finish
-    VkFence inFlightFence = frames_[currentFrame_]->inFlightFence();
-    vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+    VkFence waitFence = frames_[currentFrame_]->inFlightFence();
+    vkWaitForFences(device, 1, &waitFence, VK_TRUE, UINT64_MAX);
 
     // Acquire next swapchain image
     uint32_t imageIndex;
@@ -159,13 +159,13 @@ void PaperRenderer::renderFrame() {
                                             VK_NULL_HANDLE, &imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         // Handle swapchain out of date (should call resize, but we don't have dimensions)
-        VkFence inFlightFence = frames_[currentFrame_]->inFlightFence();
-        vkResetFences(device, 1, &inFlightFence);
+        VkFence resetFence = frames_[currentFrame_]->inFlightFence();
+        vkResetFences(device, 1, &resetFence);
         return;
     }
 
-    VkFence inFlightFence = frames_[currentFrame_]->inFlightFence();
-    vkResetFences(device, 1, &inFlightFence);
+    VkFence resetFence2 = frames_[currentFrame_]->inFlightFence();
+    vkResetFences(device, 1, &resetFence2);
 
     // Record command buffer
     frames_[currentFrame_]->beginCommandBuffer();
@@ -200,8 +200,8 @@ void PaperRenderer::renderFrame() {
     if (vkCreateFramebuffer(device, &fbInfo, nullptr, &framebuffer) != VK_SUCCESS) {
         LOGE("Failed to create framebuffer");
         frames_[currentFrame_]->endCommandBuffer();
-        VkFence inFlightFence = frames_[currentFrame_]->inFlightFence();
-        vkResetFences(device, 1, &inFlightFence);
+        VkFence resetFence3 = frames_[currentFrame_]->inFlightFence();
+        vkResetFences(device, 1, &resetFence3);
         return;
     }
     renderPassInfo.framebuffer = framebuffer;
@@ -264,13 +264,15 @@ void PaperRenderer::renderFrame() {
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &frames_[currentFrame_]->imageAvailableSemaphore();
+    VkSemaphore imageAvailableSemaphore = frames_[currentFrame_]->imageAvailableSemaphore();
+    submitInfo.pWaitSemaphores = &imageAvailableSemaphore;
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &cmd;
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &frames_[currentFrame_]->renderFinishedSemaphore();
+    VkSemaphore renderFinishedSemaphore = frames_[currentFrame_]->renderFinishedSemaphore();
+    submitInfo.pSignalSemaphores = &renderFinishedSemaphore;
 
     if (vkQueueSubmit(context_->graphicsQueue(), 1, &submitInfo,
                       frames_[currentFrame_]->inFlightFence()) != VK_SUCCESS) {
@@ -281,9 +283,10 @@ void PaperRenderer::renderFrame() {
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &frames_[currentFrame_]->renderFinishedSemaphore();
+    presentInfo.pWaitSemaphores = &renderFinishedSemaphore;
     presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &context_->swapchain();
+    VkSwapchainKHR swapchain = context_->swapchain();
+    presentInfo.pSwapchains = &swapchain;
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.pResults = nullptr;
 

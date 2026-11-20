@@ -4,6 +4,8 @@
 #include <memory>
 #include <vector>
 
+#include "material/material.h"
+
 class VulkanContext;
 class VulkanRenderPass;
 class VulkanPipeline;
@@ -24,16 +26,6 @@ struct LightParams {
     float ambient = 0.3f;
     float envColor[3] = {0.8f, 0.85f, 0.9f};
     float envIntensity = 0.4f;
-};
-
-struct PaperMaterialParams {
-    float color[3] = {0.95f, 0.95f, 0.90f};
-    float roughness = 0.35f;
-    float specularStrength = 0.10f;
-    float specularRoughness = 0.60f;
-    float fiberStrength = 0.50f;
-    float grainScale = 1.0f;
-    float thickness = 0.10f;
 };
 
 // Main Vulkan renderer. Orchestrates all rendering passes for the paper engine.
