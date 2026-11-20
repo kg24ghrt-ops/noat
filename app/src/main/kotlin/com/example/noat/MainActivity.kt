@@ -92,3 +92,19 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         paperLib.paperShutdown()
     }
 }
+
+/**
+ * Paper material type presets (mirrors the C++ PaperType enum).
+ * Order must match C++ PaperType enum definition.
+ */
+enum class PaperMaterialPresets {
+    StandardNotebook,
+    PremiumWriting,
+    Printer,
+    Recycled,
+    Watercolor,
+    Cotton,
+    Handmade,
+    RoughTextured,
+    Parchment;
+}

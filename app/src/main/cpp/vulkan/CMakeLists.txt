@@ -3,7 +3,6 @@
 
 set(VULKAN_ENGINE_SRC
     context.cpp
-    swapchain.cpp
     renderpass.cpp
     pipeline.cpp
     resources.cpp
