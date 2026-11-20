@@ -42,7 +42,7 @@ class MainActivity : AppCompatActivity() {
         // Allow the surface to be composited behind other views (TextView, FAB)
         paperSurface.setZOrderMediaOverlay(true)
         paperSurface.setEGLConfigChooser(8, 8, 8, 8, 0, 0)
-        paperSurface.renderer = paperRenderer
+        paperSurface.setRenderer(paperRenderer)
         paperSurface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY)
 
         // Show engine info in the TextView

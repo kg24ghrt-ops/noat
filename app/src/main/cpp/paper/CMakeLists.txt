@@ -3,7 +3,6 @@
 
 set(PAPER_ENGINE_SRC
     core/capabilities.cpp
-    core/gl_context.cpp
     rendering/shader.cpp
     rendering/program.cpp
     rendering/texture.cpp
