@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include <vector>
 
 // Graphics pipelines for the paper renderer:
 //   geometryPipeline - renders paper surface (geometry subpass)
