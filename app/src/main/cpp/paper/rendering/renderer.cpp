@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <sstream>
+#include <utility>
 
 // GLSL ES shader sources for the paper renderer.
 // All shaders use precision qualifiers appropriate for Mali GPUs:
