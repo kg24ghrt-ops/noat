@@ -182,11 +182,13 @@ Java_com_example_noat_PaperLib_paperSetMaterial(JNIEnv* env, jobject /* thiz */,
                                                  jfloat grain_scale,
                                                  jfloat thickness) {
     (void)env;
-    (void)paper_type;
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
     if (!g_renderer) return;
 
-    PaperMaterialParams mat;
+    PaperMaterialParams mat = PaperMaterialPresets::get(
+        static_cast<PaperType>(paper_type));
+
+    // Override with JNI-provided values if they differ from defaults
     mat.color[0] = r;
     mat.color[1] = g;
     mat.color[2] = b;
