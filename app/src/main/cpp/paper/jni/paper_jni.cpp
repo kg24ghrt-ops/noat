@@ -110,12 +110,21 @@ Java_com_example_noat_PaperLib_paperInitWithCaps(JNIEnv* env, jobject /* thiz */
          caps.renderer.c_str(), caps.is_mali ? 1 : 0,
          static_cast<int>(caps.recommended_tier));
 
+    if (!g_renderer) {
+        LOGE("Paper engine not initialized. Call paperInit first.");
+        return;
+    }
+
     // Initialize the renderer (compiles shaders, creates geometry/textures)
+    LOGI("Calling renderer->initialize()...");
     try {
         g_renderer->initialize(caps);
         LOGI("Paper renderer initialized successfully");
     } catch (const std::exception& e) {
         LOGE("Failed to initialize paper renderer: %s", e.what());
+        throw;
+    } catch (...) {
+        LOGE("Failed to initialize paper renderer: unknown exception");
         throw;
     }
 }

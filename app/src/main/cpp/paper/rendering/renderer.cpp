@@ -4,6 +4,8 @@
 #include <sstream>
 #include <utility>
 
+#include <EGL/egl.h>
+
 // GLSL ES shader sources for the paper renderer.
 // All shaders use precision qualifiers appropriate for Mali GPUs:
 //   mediump for colors, normals, lighting
@@ -147,13 +149,33 @@ PaperRenderer::PaperRenderer() = default;
 PaperRenderer::~PaperRenderer() = default;
 
 void PaperRenderer::initialize(const GPUCaps& caps) {
+    LOGI("PaperRenderer::initialize() entry");
+
+    // Verify OpenGL ES context is current before making GL calls
+    if (eglGetCurrentContext() == EGL_NO_CONTEXT) {
+        LOGE("PaperRenderer::initialize() no current EGL context");
+        return;
+    }
+
     caps_ = caps;
+    LOGI("PaperRenderer::initialize() caps copied");
+
     initialized_ = true;
+    LOGI("PaperRenderer::initialize() calling initShaders()");
 
     initShaders();
+    LOGI("PaperRenderer::initialize() initShaders() done");
+
     initGeometry();
+    LOGI("PaperRenderer::initialize() initGeometry() done");
+
     initTextures();
+    LOGI("PaperRenderer::initialize() initTextures() done");
+
     initFramebuffers();
+    LOGI("PaperRenderer::initialize() initFramebuffers() done");
+
+    LOGI("PaperRenderer::initialize() complete");
 }
 
 void PaperRenderer::setConfig(const RenderConfig& config) {
