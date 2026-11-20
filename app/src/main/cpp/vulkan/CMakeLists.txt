@@ -63,9 +63,3 @@ target_compile_options(
     -ffast-math
     -fno-rtti
 )
-
-target_compile_definitions(
-    paper-engine
-    PRIVATE
-    PAPER_ENGINE_EXPORT=__attribute__((visibility("default")))
-)
