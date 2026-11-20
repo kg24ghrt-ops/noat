@@ -13,7 +13,6 @@ set(PAPER_ENGINE_SRC
 
 set(PAPER_ENGINE_HDR
     core/capabilities.h
-    core/gl_context.h
     core/gl_object.hpp
     rendering/shader.h
     rendering/program.h
