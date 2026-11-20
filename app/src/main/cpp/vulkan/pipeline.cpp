@@ -1,12 +1,39 @@
 #include "pipeline.h"
 
 #include <android/log.h>
-#include <fstream>
 #include <vector>
 
 #define TAG "VulkanPipeline"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+
+// Embedded SPIR-V shaders (minimal: full-screen triangle, white fragment)
+static const std::vector<uint32_t> kVertSpirv = {
+    0x07230203u, 0x00010000u, 0x0000000Eu, 0x0000001Du, 0x00000000u, 0x00020010u, 0x00000000u, 0x00030013u, 0x00000000u, 0x00000001u, 0x00040003u, 0x00000006u,
+    0x00000008u, 0x00000000u, 0x00030007u, 0x00000006u, 0x00000007u, 0x0000000Cu, 0x6E69616Du, 0x00000000u, 0x00030007u, 0x0000000Au, 0x0000000Bu, 0x0000000Cu,
+    0x565F6C67u, 0x65747265u, 0x646E4978u, 0x00007865u, 0x00030007u, 0x0000000Du, 0x0000000Eu, 0x0000000Cu, 0x505F6C67u, 0x7469736Fu, 0x006E6F69u, 0x00020014u,
+    0x00000001u, 0x00030015u, 0x00000002u, 0x00000020u, 0x00040017u, 0x00000003u, 0x00000002u, 0x00000004u, 0x00020016u, 0x00000005u, 0x00040015u, 0x00000004u,
+    0x00000020u, 0x00000001u, 0x00040019u, 0x00000009u, 0x00000004u, 0x00000000u, 0x00040019u, 0x0000000Cu, 0x00000003u, 0x00000001u, 0x0004002Bu, 0x0000000Fu,
+    0x00000004u, 0x00000000u, 0x0004002Bu, 0x00000010u, 0x00000004u, 0x00000001u, 0x0004002Bu, 0x00000011u, 0x00000002u, 0xBF800000u, 0x0004002Bu, 0x00000012u,
+    0x00000002u, 0x00000000u, 0x0004002Bu, 0x00000013u, 0x00000002u, 0x3F800000u, 0x0007002Du, 0x00000014u, 0x00000003u, 0x00000011u, 0x00000011u, 0x00000012u,
+    0x00000013u, 0x0007002Du, 0x00000015u, 0x00000003u, 0x00000013u, 0x00000011u, 0x00000012u, 0x00000013u, 0x0007002Du, 0x00000016u, 0x00000003u, 0x00000012u,
+    0x00000013u, 0x00000012u, 0x00000013u, 0x0004003Bu, 0x00000009u, 0x0000000Au, 0x00000004u, 0x0004003Bu, 0x0000000Cu, 0x0000000Du, 0x00000003u, 0x00040047u,
+    0x0000000Du, 0x00000000u, 0x00000000u, 0x00040047u, 0x0000000Au, 0x00000000u, 0x00000004u, 0x00040036u, 0x00000006u, 0x00000005u, 0x00000001u, 0x000200F9u,
+    0x00000000u, 0x00040033u, 0x0000000Fu, 0x00000004u, 0x0000000Au, 0x00050034u, 0x00000017u, 0x00000004u, 0x0000000Fu, 0x0000000Fu, 0x00050034u, 0x00000018u,
+    0x00000004u, 0x0000000Fu, 0x00000010u, 0x0006002Eu, 0x00000019u, 0x00000002u, 0x00000018u, 0x00000013u, 0x00000012u, 0x0006002Eu, 0x0000001Au, 0x00000002u,
+    0x00000017u, 0x00000011u, 0x00000019u, 0x0006002Eu, 0x0000001Bu, 0x00000002u, 0x00000018u, 0x00000011u, 0x00000013u, 0x0006002Eu, 0x0000001Bu, 0x00000002u,
+    0x00000017u, 0x00000011u, 0x0000001Bu, 0x0007002Du, 0x0000001Cu, 0x00000003u, 0x0000001Au, 0x0000001Bu, 0x00000012u, 0x00000013u, 0x00030040u, 0x0000000Du,
+    0x0000001Cu, 0x00010039u, 0x00010038u,
+};
+
+static const std::vector<uint32_t> kFragSpirv = {
+    0x07230203u, 0x00010000u, 0x0000000Eu, 0x0000000Du, 0x00000000u, 0x00020010u, 0x00000000u, 0x00030013u, 0x00000000u, 0x00000001u, 0x00040003u, 0x00000005u,
+    0x00000007u, 0x00000000u, 0x00030007u, 0x00000005u, 0x00000006u, 0x0000000Cu, 0x6E69616Du, 0x00000000u, 0x00030007u, 0x00000009u, 0x0000000Au, 0x0000000Cu,
+    0x67617266u, 0x6F6C6F43u, 0x00000072u, 0x00020014u, 0x00000001u, 0x00030015u, 0x00000002u, 0x00000020u, 0x00040017u, 0x00000003u, 0x00000002u, 0x00000004u,
+    0x00020016u, 0x00000004u, 0x00040019u, 0x00000008u, 0x00000003u, 0x00000001u, 0x0004002Bu, 0x0000000Bu, 0x00000002u, 0x3F800000u, 0x0007002Du, 0x0000000Cu,
+    0x00000003u, 0x0000000Bu, 0x0000000Bu, 0x0000000Bu, 0x0000000Bu, 0x0004003Bu, 0x00000008u, 0x00000009u, 0x00000003u, 0x00040047u, 0x00000009u, 0x00000001u,
+    0x00000000u, 0x00040036u, 0x00000005u, 0x00000004u, 0x00000001u, 0x000200F9u, 0x00000000u, 0x00030040u, 0x00000009u, 0x0000000Cu, 0x00010039u, 0x00010038u,
+};
 
 VulkanPipeline::~VulkanPipeline() {
     // shutdown is called explicitly
@@ -28,12 +55,45 @@ bool VulkanPipeline::init(VkDevice device, VkRenderPass renderPass, VkExtent2D e
         return false;
     }
 
-    // Shader modules - embedded SPIR-V will be loaded from assets at runtime.
-    // For now, create minimal inline SPIR-V shaders.
-    // These are basic passthrough shaders; real shader code will be loaded
-    // from compiled SPIR-V assets in the APK.
+    // Create shader modules from embedded SPIR-V
+    VkShaderModule vertModule = createShaderModule(kVertSpirv);
+    VkShaderModule fragModule = createShaderModule(kFragSpirv);
+    if (vertModule == VK_NULL_HANDLE || fragModule == VK_NULL_HANDLE) {
+        LOGE("Failed to create shader modules");
+        if (vertModule != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vertModule, nullptr);
+        if (fragModule != VK_NULL_HANDLE) vkDestroyShaderModule(device_, fragModule, nullptr);
+        vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
+        pipelineLayout_ = VK_NULL_HANDLE;
+        return false;
+    }
 
-    LOGI("Vulkan pipeline created");
+    // Create geometry pipeline (subpass 0)
+    if (!createGraphicsPipeline(renderPass, 0, vertModule, fragModule, geometryPipeline_)) {
+        LOGE("Failed to create geometry pipeline");
+        vkDestroyShaderModule(device_, vertModule, nullptr);
+        vkDestroyShaderModule(device_, fragModule, nullptr);
+        vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
+        pipelineLayout_ = VK_NULL_HANDLE;
+        return false;
+    }
+
+    // Create lighting pipeline (subpass 1)
+    if (!createGraphicsPipeline(renderPass, 1, vertModule, fragModule, lightingPipeline_)) {
+        LOGE("Failed to create lighting pipeline");
+        vkDestroyPipeline(device_, geometryPipeline_, nullptr);
+        geometryPipeline_ = VK_NULL_HANDLE;
+        vkDestroyShaderModule(device_, vertModule, nullptr);
+        vkDestroyShaderModule(device_, fragModule, nullptr);
+        vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
+        pipelineLayout_ = VK_NULL_HANDLE;
+        return false;
+    }
+
+    // Shader modules no longer needed after pipeline creation
+    vkDestroyShaderModule(device_, vertModule, nullptr);
+    vkDestroyShaderModule(device_, fragModule, nullptr);
+
+    LOGI("Vulkan pipelines created (geometry + lighting)");
     return true;
 }
 
