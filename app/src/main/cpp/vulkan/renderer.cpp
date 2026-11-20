@@ -77,30 +77,6 @@ bool PaperRenderer::init(void* nativeWindow) {
             return false;
         }
     }
-    if (vkCreateCommandPool(context_->device(), &poolInfo, nullptr, &commandPool_) != VK_SUCCESS) {
-        LOGE("Failed to create command pool");
-        return false;
-    }
-
-    // Create resources
-    resources_ = std::make_unique<VulkanResources>();
-    uint32_t imageCount = static_cast<uint32_t>(context_->swapchainImages().size());
-    if (!resources_->init(context_->device(), context_->physicalDevice(), commandPool_,
-                          context_->graphicsQueue(), dummyLayout, imageCount)) {
-        LOGE("Failed to create resources");
-        return false;
-    }
-
-    // Create frames (one per swapchain image)
-    frames_.resize(imageCount);
-    for (uint32_t i = 0; i < imageCount; ++i) {
-        frames_[i] = std::make_unique<VulkanFrame>();
-        if (!frames_[i]->init(context_->device(), context_->graphicsQueueFamily())) {
-            LOGE("Failed to initialize frame %u", i);
-            return false;
-        }
-    }
-
     // Set default lighting
     light_.direction[0] = 0.5f; light_.direction[1] = -1.0f; light_.direction[2] = 0.5f;
     light_.color[0] = 1.0f; light_.color[1] = 1.0f; light_.color[2] = 0.95f;
@@ -118,8 +94,6 @@ bool PaperRenderer::init(void* nativeWindow) {
     material_.grainScale = 1.0f;
     material_.thickness = 0.08f;
 
-    vkDestroyDescriptorSetLayout(context_->device(), dummyLayout, nullptr);
-
     initialized_ = true;
     LOGI("Paper renderer initialized");
     return true;
@@ -133,7 +107,7 @@ bool PaperRenderer::resize(int width, int height) {
     resources_->shutdown();
     uint32_t imageCount = static_cast<uint32_t>(context_->swapchainImages().size());
     if (!resources_->init(context_->device(), context_->physicalDevice(), commandPool_,
-                          context_->graphicsQueue(), /*descriptorSetLayout=*/VK_NULL_HANDLE, imageCount)) {
+                          context_->graphicsQueue(), imageCount)) {
         LOGE("Failed to recreate resources after resize");
         return false;
     }
@@ -175,7 +149,8 @@ void PaperRenderer::renderFrame() {
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
     // Wait for previous frame to finish
-    vkWaitForFences(device, 1, &frames_[currentFrame_]->inFlightFence(), VK_TRUE, UINT64_MAX);
+    VkFence inFlightFence = frames_[currentFrame_]->inFlightFence();
+    vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
 
     // Acquire next swapchain image
     uint32_t imageIndex;
@@ -184,11 +159,13 @@ void PaperRenderer::renderFrame() {
                                             VK_NULL_HANDLE, &imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         // Handle swapchain out of date (should call resize, but we don't have dimensions)
-        vkResetFences(device, 1, &frames_[currentFrame_]->inFlightFence());
+        VkFence inFlightFence = frames_[currentFrame_]->inFlightFence();
+        vkResetFences(device, 1, &inFlightFence);
         return;
     }
 
-    vkResetFences(device, 1, &frames_[currentFrame_]->inFlightFence());
+    VkFence inFlightFence = frames_[currentFrame_]->inFlightFence();
+    vkResetFences(device, 1, &inFlightFence);
 
     // Record command buffer
     frames_[currentFrame_]->beginCommandBuffer();
@@ -223,7 +200,8 @@ void PaperRenderer::renderFrame() {
     if (vkCreateFramebuffer(device, &fbInfo, nullptr, &framebuffer) != VK_SUCCESS) {
         LOGE("Failed to create framebuffer");
         frames_[currentFrame_]->endCommandBuffer();
-        vkResetFences(device, 1, &frames_[currentFrame_]->inFlightFence());
+        VkFence inFlightFence = frames_[currentFrame_]->inFlightFence();
+        vkResetFences(device, 1, &inFlightFence);
         return;
     }
     renderPassInfo.framebuffer = framebuffer;

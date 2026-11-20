@@ -3,6 +3,7 @@
 #include <android/log.h>
 #include <set>
 #include <algorithm>
+#include <vulkan/vulkan_android.h>
 
 #define TAG "VulkanContext"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
