@@ -44,6 +44,7 @@ class MainActivity : AppCompatActivity() {
 
         // Surface renders as a normal view in the hierarchy (behind TextView/FAB)
         paperSurface.setZOrderOnTop(false)
+        paperSurface.setEGLContextClientVersion(3)
         paperSurface.setEGLConfigChooser(8, 8, 8, 8, 0, 0)
         paperSurface.setRenderer(paperRenderer)
         paperSurface.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY)
