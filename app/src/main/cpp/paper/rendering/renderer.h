@@ -44,30 +44,6 @@ struct LightParams {
     float env_intensity = 0.4f;
 };
 
-// Paper material parameters (physically inspired, dielectric)
-struct PaperMaterialParams {
-    // Base paper color (albedo)
-    float color[3] = {0.95f, 0.95f, 0.9f}; // off-white
-
-    // Surface roughness (0 = smooth, 1 = very rough)
-    float roughness = 0.35f;
-
-    // Specular strength for paper (low - paper is mostly diffuse)
-    float specular_strength = 0.1f;
-
-    // Specular roughness (microfacet)
-    float specular_roughness = 0.6f;
-
-    // Fiber detail strength (normal map intensity)
-    float fiber_strength = 0.5f;
-
-    // Grain scale
-    float grain_scale = 1.0f;
-
-    // Thickness (for edge darkening / subsurface approximation)
-    float thickness = 0.1f; // mm
-};
-
 // Main renderer. Coordinates all rendering passes for the paper engine.
 // Tier A (GLES 3.0): forward rendering with normal mapping + CPU subdivision.
 // Tier B (GLES 3.1): + compute shader procedural texture generation.

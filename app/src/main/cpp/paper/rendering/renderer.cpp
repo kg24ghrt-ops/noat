@@ -365,15 +365,15 @@ void PaperRenderer::renderGeometryPass() {
     paper_program_->setUniformMatrix4fv("u_projection", proj);
 
     // Lighting uniforms
-    paper_program_->setUniform("u_light_dir", light_.direction);
-    paper_program_->setUniform("u_light_color", light_.color);
+    paper_program_->setUniform("u_light_dir", light_.direction, 3);
+    paper_program_->setUniform("u_light_color", light_.color, 3);
     paper_program_->setUniform("u_light_intensity", light_.intensity);
     paper_program_->setUniform("u_ambient", light_.ambient);
-    paper_program_->setUniform("u_env_color", light_.env_color);
+    paper_program_->setUniform("u_env_color", light_.env_color, 3);
     paper_program_->setUniform("u_env_intensity", light_.env_intensity);
 
     // Material uniforms
-    paper_program_->setUniform("u_paper_color", material_.color);
+    paper_program_->setUniform("u_paper_color", material_.color, 3);
     paper_program_->setUniform("u_roughness", material_.roughness);
     paper_program_->setUniform("u_specular_strength", material_.specular_strength);
     paper_program_->setUniform("u_specular_roughness", material_.specular_roughness);
