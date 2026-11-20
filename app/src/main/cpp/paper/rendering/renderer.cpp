@@ -198,12 +198,24 @@ void PaperRenderer::initShaders() {
     // Paper shader (geometry + lighting combined in one forward pass for Tier A)
     Shader vert(Shader::Type::Vertex, kPaperVertexShader);
     Shader frag(Shader::Type::Fragment, kPaperFragmentShader);
-    paper_program_ = std::make_unique<Program>(std::vector<Shader>{std::move(vert), std::move(frag)});
+    {
+        std::vector<Shader> shaders;
+        shaders.reserve(2);
+        shaders.push_back(std::move(vert));
+        shaders.push_back(std::move(frag));
+        paper_program_ = std::make_unique<Program>(std::move(shaders));
+    }
 
     // Composite shader (full-screen quad)
     Shader comp_vert(Shader::Type::Vertex, kCompositeVertexShader);
     Shader comp_frag(Shader::Type::Fragment, kCompositeFragmentShader);
-    composite_program_ = std::make_unique<Program>(std::vector<Shader>{std::move(comp_vert), std::move(comp_frag)});
+    {
+        std::vector<Shader> shaders;
+        shaders.reserve(2);
+        shaders.push_back(std::move(comp_vert));
+        shaders.push_back(std::move(comp_frag));
+        composite_program_ = std::make_unique<Program>(std::move(shaders));
+    }
 }
 
 void PaperRenderer::initGeometry() {
@@ -383,11 +395,11 @@ void PaperRenderer::renderGeometryPass() {
 
     // Bind textures
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, fiber_normal_tex_->get());
+    glBindTexture(GL_TEXTURE_2D, fiber_normal_tex_->id());
     paper_program_->setUniform("u_fiber_normal", 0);
 
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, grain_tex_->get());
+    glBindTexture(GL_TEXTURE_2D, grain_tex_->id());
     paper_program_->setUniform("u_grain", 1);
 
     // Draw paper
