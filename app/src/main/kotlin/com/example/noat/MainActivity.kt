@@ -2,18 +2,21 @@ package com.example.noat
 
 import android.os.Bundle
 import android.opengl.GLSurfaceView
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.example.noat.R
-import android.widget.TextView
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var paperSurface: GLSurfaceView
     private lateinit var paperRenderer: PaperRenderer
+    private val paperLib = PaperLib()
+    private var currentPaperIndex = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,9 +50,21 @@ class MainActivity : AppCompatActivity() {
 
         // Show engine info in the TextView
         val textView = findViewById<TextView>(R.id.textView)
-        // Info will be populated after surface creation via a callback
-        // For now, show app name; the native message is available via paperGetInfo
         textView.text = getString(R.string.app_name)
+
+        // FAB: cycle through paper material types on each tap
+        val types = PaperMaterialPresets.values()
+        val fab = findViewById<FloatingActionButton>(R.id.fab)
+        fab.setOnClickListener {
+            currentPaperIndex = (currentPaperIndex + 1) % types.size
+            val type = types[currentPaperIndex]
+            paperLib.paperSetMaterial(
+                type.ordinal,
+                0.92f, 0.94f, 0.98f,
+                0.4f, 0.1f, 0.6f, 0.5f, 1.0f, 0.08f
+            )
+            textView.text = "${getString(R.string.app_name)} — ${type.name}"
+        }
     }
 
     override fun onPause() {
