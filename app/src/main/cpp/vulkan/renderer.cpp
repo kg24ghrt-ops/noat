@@ -39,7 +39,6 @@ constexpr PaperSize kPaperSizes[] = {
     {"LEGAL",  "Legal",  216.0f, 356.0f},
 };
 constexpr size_t kPaperSizeCount = sizeof(kPaperSizes) / sizeof(kPaperSizes[0]);
-constexpr const char* kDefaultPaperSizeId = "A4";
 
 const PaperSize* findPaperSize(const char* id) {
     for (size_t i = 0; i < kPaperSizeCount; ++i) {
