@@ -1,6 +1,7 @@
 package com.example.noat
 
 import android.os.Bundle
+import android.view.Choreographer
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -18,6 +19,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
     private lateinit var vulkanSurface: SurfaceView
     private val paperLib = PaperLib()
     private var currentPaperIndex = 0
+    private var isRendering = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,6 +71,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         if (surface.isValid) {
             paperLib.paperInitWithSurface(surface)
         }
+        startRenderLoop()
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -76,35 +79,57 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        stopRenderLoop()
         paperLib.paperShutdown()
     }
 
     override fun onPause() {
         super.onPause()
+        stopRenderLoop()
     }
 
     override fun onResume() {
         super.onResume()
+        startRenderLoop()
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        stopRenderLoop()
         paperLib.paperShutdown()
     }
-}
 
-/**
- * Paper material type presets (mirrors the C++ PaperType enum).
- * Order must match C++ PaperType enum definition.
- */
-enum class PaperMaterialPresets {
-    StandardNotebook,
-    PremiumWriting,
-    Printer,
-    Recycled,
-    Watercolor,
-    Cotton,
-    Handmade,
-    RoughTextured,
-    Parchment;
+    private fun startRenderLoop() {
+        if (isRendering) return
+        isRendering = true
+        val callback = object : Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                if (isRendering) {
+                    paperLib.paperRenderFrame()
+                    Choreographer.getInstance().postFrameCallback(this)
+                }
+            }
+        }
+        Choreographer.getInstance().postFrameCallback(callback)
+    }
+
+    private fun stopRenderLoop() {
+        isRendering = false
+    }
+
+    /**
+     * Paper material type presets (mirrors the C++ PaperType enum).
+     * Order must match C++ PaperType enum definition.
+     */
+    enum class PaperMaterialPresets {
+        StandardNotebook,
+        PremiumWriting,
+        Printer,
+        Recycled,
+        Watercolor,
+        Cotton,
+        Handmade,
+        RoughTextured,
+        Parchment;
+    }
 }
