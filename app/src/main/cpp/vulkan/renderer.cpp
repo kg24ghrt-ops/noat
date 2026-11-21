@@ -33,8 +33,7 @@ bool PaperRenderer::init(void* nativeWindow) {
 
     // Create render pass
     renderPass_ = std::make_unique<VulkanRenderPass>();
-    if (!renderPass_->init(context_->device(), VK_FORMAT_B8G8R8A8_UNORM,
-                           VK_FORMAT_D32_SFLOAT)) {
+    if (!renderPass_->init(context_->device(), VK_FORMAT_B8G8R8A8_UNORM)) {
         LOGE("Failed to create render pass");
         return false;
     }
