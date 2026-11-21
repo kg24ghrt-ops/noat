@@ -33,6 +33,7 @@ public:
     VkQueue graphicsQueue() const { return graphicsQueue_; }
     VkSurfaceKHR surface() const { return surface_; }
     VkSwapchainKHR swapchain() const { return swapchain_.swapchain; }
+    VkFormat swapchainFormat() const { return swapchain_.format; }
     int width() const { return swapchain_.width; }
     int height() const { return swapchain_.height; }
     uint32_t graphicsQueueFamily() const { return graphicsQueueFamily_; }

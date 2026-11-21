@@ -24,19 +24,24 @@ PaperRenderer::~PaperRenderer() {
 
 bool PaperRenderer::init(void* nativeWindow) {
     ANativeWindow* window = static_cast<ANativeWindow*>(nativeWindow);
+    LOGI("PaperRenderer::init called");
 
     context_ = std::make_unique<VulkanContext>();
     if (!context_->init(window)) {
         LOGE("Failed to initialize Vulkan context");
         return false;
     }
+    LOGI("Vulkan context initialized, format=%d, size=%dx%d, imageCount=%zu",
+         context_->swapchainFormat(), context_->width(), context_->height(),
+         context_->swapchainImages().size());
 
     // Create render pass
     renderPass_ = std::make_unique<VulkanRenderPass>();
-    if (!renderPass_->init(context_->device(), VK_FORMAT_B8G8R8A8_UNORM)) {
+    if (!renderPass_->init(context_->device(), context_->swapchainFormat())) {
         LOGE("Failed to create render pass");
         return false;
     }
+    LOGI("Render pass created");
 
     // Create command pool
     VkCommandPoolCreateInfo poolInfo{};
@@ -47,6 +52,7 @@ bool PaperRenderer::init(void* nativeWindow) {
         LOGE("Failed to create command pool");
         return false;
     }
+    LOGI("Command pool created");
 
     // Create resources (includes descriptor set layout)
     resources_ = std::make_unique<VulkanResources>();
@@ -56,6 +62,9 @@ bool PaperRenderer::init(void* nativeWindow) {
         LOGE("Failed to create resources");
         return false;
     }
+    LOGI("Resources created, descriptorSetLayout=%p, descriptorSets=%zu",
+         static_cast<void*>(resources_->descriptorSetLayout()),
+         resources_->descriptorSets().size());
 
     // Create pipeline using the descriptor set layout from resources
     pipeline_ = std::make_unique<VulkanPipeline>();
@@ -66,6 +75,10 @@ bool PaperRenderer::init(void* nativeWindow) {
         LOGE("Failed to create pipeline");
         return false;
     }
+    LOGI("Pipeline created, pipeline=%p, layout=%p",
+         static_cast<void*>(pipeline_->pipeline()),
+         static_cast<void*>(pipeline_->pipelineLayout()));
+
     frames_.resize(imageCount);
     for (uint32_t i = 0; i < imageCount; ++i) {
         frames_[i] = std::make_unique<VulkanFrame>();
@@ -74,6 +87,7 @@ bool PaperRenderer::init(void* nativeWindow) {
             return false;
         }
     }
+    LOGI("Frames created (%zu)", frames_.size());
     // Set default lighting
     light_.direction[0] = 0.5f; light_.direction[1] = -1.0f; light_.direction[2] = 0.5f;
     light_.color[0] = 1.0f; light_.color[1] = 1.0f; light_.color[2] = 0.95f;
@@ -92,7 +106,7 @@ bool PaperRenderer::init(void* nativeWindow) {
     material_.thickness = 0.08f;
 
     initialized_ = true;
-    LOGI("Paper renderer initialized");
+    LOGI("Paper renderer initialized successfully");
     return true;
 }
 
@@ -148,11 +162,13 @@ void PaperRenderer::renderFrame() {
     VkDevice device = context_->device();
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
+    LOGI("renderFrame #%u: begin", currentFrame_);
+
     // Wait for previous frame to finish
     VkFence waitFence = frames_[currentFrame_]->inFlightFence();
     VkResult waitResult = vkWaitForFences(device, 1, &waitFence, VK_TRUE, UINT64_MAX);
     if (waitResult != VK_SUCCESS) {
-        LOGE("vkWaitForFences failed: %d", waitResult);
+        LOGE("renderFrame #%u: vkWaitForFences failed: %d", currentFrame_, waitResult);
         return;
     }
 
@@ -162,20 +178,25 @@ void PaperRenderer::renderFrame() {
                                             frames_[currentFrame_]->imageAvailableSemaphore(),
                                             VK_NULL_HANDLE, &imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        LOGI("renderFrame #%u: swapchain out of date (%d), resetting fence", currentFrame_, result);
         VkFence resetFence = frames_[currentFrame_]->inFlightFence();
         vkResetFences(device, 1, &resetFence);
         return;
     }
     if (result != VK_SUCCESS) {
-        LOGE("vkAcquireNextImageKHR failed: %d", result);
+        LOGE("renderFrame #%u: vkAcquireNextImageKHR failed: %d", currentFrame_, result);
         return;
     }
+    LOGI("renderFrame #%u: acquired image %u", currentFrame_, imageIndex);
 
     VkFence resetFence2 = frames_[currentFrame_]->inFlightFence();
     vkResetFences(device, 1, &resetFence2);
 
     // Record command buffer
-    frames_[currentFrame_]->beginCommandBuffer();
+    if (!frames_[currentFrame_]->beginCommandBuffer()) {
+        LOGE("renderFrame #%u: failed to begin command buffer", currentFrame_);
+        return;
+    }
 
     VkCommandBuffer cmd = frames_[currentFrame_]->commandBuffer();
 
@@ -199,7 +220,7 @@ void PaperRenderer::renderFrame() {
     fbInfo.layers = 1;
 
     if (vkCreateFramebuffer(device, &fbInfo, nullptr, &framebuffer) != VK_SUCCESS) {
-        LOGE("Failed to create framebuffer");
+        LOGE("renderFrame #%u: failed to create framebuffer", currentFrame_);
         frames_[currentFrame_]->endCommandBuffer();
         VkFence resetFence3 = frames_[currentFrame_]->inFlightFence();
         vkResetFences(device, 1, &resetFence3);
@@ -212,7 +233,7 @@ void PaperRenderer::renderFrame() {
 
     // Clear values (single color attachment)
     std::array<VkClearValue, 1> clearValues{};
-    clearValues[0].color = {{0.95f, 0.95f, 0.90f, 1.0f}};
+    clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
@@ -221,7 +242,7 @@ void PaperRenderer::renderFrame() {
     // Draw paper (3 vertices for a full-screen triangle, no index buffer needed)
     VkPipeline pipeline = pipeline_->pipeline();
     if (pipeline == VK_NULL_HANDLE) {
-        LOGE("Pipeline is null - cannot draw");
+        LOGE("renderFrame #%u: Pipeline is null - cannot draw", currentFrame_);
         vkCmdEndRenderPass(cmd);
         frames_[currentFrame_]->endCommandBuffer();
         vkDestroyFramebuffer(device, framebuffer, nullptr);
@@ -229,6 +250,7 @@ void PaperRenderer::renderFrame() {
         vkResetFences(device, 1, &resetFence4);
         return;
     }
+    LOGI("renderFrame #%u: pipeline bound, drawing 3 vertices", currentFrame_);
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
@@ -272,7 +294,7 @@ void PaperRenderer::renderFrame() {
 
     if (vkQueueSubmit(context_->graphicsQueue(), 1, &submitInfo,
                       frames_[currentFrame_]->inFlightFence()) != VK_SUCCESS) {
-        LOGE("Failed to submit draw command buffer");
+        LOGE("renderFrame #%u: failed to submit draw command buffer", currentFrame_);
         vkDestroyFramebuffer(device, framebuffer, nullptr);
         return;
     }
@@ -290,9 +312,11 @@ void PaperRenderer::renderFrame() {
 
     VkResult presentResult = vkQueuePresentKHR(context_->graphicsQueue(), &presentInfo);
     if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
-        // Swapchain needs recreation - will be handled on next frame
+        LOGI("renderFrame #%u: present out of date/suboptimal (%d)", currentFrame_, presentResult);
     } else if (presentResult != VK_SUCCESS) {
-        LOGE("vkQueuePresentKHR failed: %d", presentResult);
+        LOGE("renderFrame #%u: vkQueuePresentKHR failed: %d", currentFrame_, presentResult);
+    } else {
+        LOGI("renderFrame #%u: presented successfully", currentFrame_);
     }
 
     vkDestroyFramebuffer(device, framebuffer, nullptr);
