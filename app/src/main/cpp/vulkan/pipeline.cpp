@@ -7,43 +7,76 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
-// Embedded SPIR-V shaders (minimal: full-screen triangle, white fragment)
+// Embedded SPIR-V shaders compiled from GLSL with glslangValidator
 static const std::vector<uint32_t> kVertSpirv = {
-    0x07230203u, 0x00010000u, 0x0000000Eu, 0x0000001Du, 0x00000000u, 0x00020010u, 0x00000000u, 0x00030013u, 0x00000000u, 0x00000001u, 0x00040003u, 0x00000006u,
-    0x00000008u, 0x00000000u, 0x00030007u, 0x00000006u, 0x00000007u, 0x0000000Cu, 0x6E69616Du, 0x00000000u, 0x00030007u, 0x0000000Au, 0x0000000Bu, 0x0000000Cu,
-    0x565F6C67u, 0x65747265u, 0x646E4978u, 0x00007865u, 0x00030007u, 0x0000000Du, 0x0000000Eu, 0x0000000Cu, 0x505F6C67u, 0x7469736Fu, 0x006E6F69u, 0x00020014u,
-    0x00000001u, 0x00030015u, 0x00000002u, 0x00000020u, 0x00040017u, 0x00000003u, 0x00000002u, 0x00000004u, 0x00020016u, 0x00000005u, 0x00040015u, 0x00000004u,
-    0x00000020u, 0x00000001u, 0x00040019u, 0x00000009u, 0x00000004u, 0x00000000u, 0x00040019u, 0x0000000Cu, 0x00000003u, 0x00000001u, 0x0004002Bu, 0x0000000Fu,
-    0x00000004u, 0x00000000u, 0x0004002Bu, 0x00000010u, 0x00000004u, 0x00000001u, 0x0004002Bu, 0x00000011u, 0x00000002u, 0xBF800000u, 0x0004002Bu, 0x00000012u,
-    0x00000002u, 0x00000000u, 0x0004002Bu, 0x00000013u, 0x00000002u, 0x3F800000u, 0x0007002Du, 0x00000014u, 0x00000003u, 0x00000011u, 0x00000011u, 0x00000012u,
-    0x00000013u, 0x0007002Du, 0x00000015u, 0x00000003u, 0x00000013u, 0x00000011u, 0x00000012u, 0x00000013u, 0x0007002Du, 0x00000016u, 0x00000003u, 0x00000012u,
-    0x00000013u, 0x00000012u, 0x00000013u, 0x0004003Bu, 0x00000009u, 0x0000000Au, 0x00000004u, 0x0004003Bu, 0x0000000Cu, 0x0000000Du, 0x00000003u, 0x00040047u,
-    0x0000000Du, 0x00000000u, 0x00000000u, 0x00040047u, 0x0000000Au, 0x00000000u, 0x00000004u, 0x00040036u, 0x00000006u, 0x00000005u, 0x00000001u, 0x000200F9u,
-    0x00000000u, 0x00040033u, 0x0000000Fu, 0x00000004u, 0x0000000Au, 0x00050034u, 0x00000017u, 0x00000004u, 0x0000000Fu, 0x0000000Fu, 0x00050034u, 0x00000018u,
-    0x00000004u, 0x0000000Fu, 0x00000010u, 0x0006002Eu, 0x00000019u, 0x00000002u, 0x00000018u, 0x00000013u, 0x00000012u, 0x0006002Eu, 0x0000001Au, 0x00000002u,
-    0x00000017u, 0x00000011u, 0x00000019u, 0x0006002Eu, 0x0000001Bu, 0x00000002u, 0x00000018u, 0x00000011u, 0x00000013u, 0x0006002Eu, 0x0000001Bu, 0x00000002u,
-    0x00000017u, 0x00000011u, 0x0000001Bu, 0x0007002Du, 0x0000001Cu, 0x00000003u, 0x0000001Au, 0x0000001Bu, 0x00000012u, 0x00000013u, 0x00030040u, 0x0000000Du,
-    0x0000001Cu, 0x00010039u, 0x00010038u,
+    0x07230203u, 0x00010000u, 0x0008000Bu, 0x0000002Du, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000Bu,
+    0x00000001u, 0x4C534C47u, 0x6474732Eu, 0x3035342Eu, 0x00000000u, 0x0003000Eu, 0x00000000u, 0x00000001u,
+    0x0007000Fu, 0x00000000u, 0x00000004u, 0x6E69616Du, 0x00000000u, 0x00000008u, 0x00000026u, 0x00030003u,
+    0x00000002u, 0x000001C2u, 0x00090004u, 0x415F4C47u, 0x735F4252u, 0x72617065u, 0x5F657461u, 0x64616873u,
+    0x6F5F7265u, 0x63656A62u, 0x00007374u, 0x00040005u, 0x00000004u, 0x6E69616Du, 0x00000000u, 0x00060005u,
+    0x00000008u, 0x565F6C67u, 0x65747265u, 0x646E4978u, 0x00007865u, 0x00030005u, 0x00000012u, 0x00736F70u,
+    0x00060005u, 0x00000024u, 0x505F6C67u, 0x65567265u, 0x78657472u, 0x00000000u, 0x00060006u, 0x00000024u,
+    0x00000000u, 0x505F6C67u, 0x7469736Fu, 0x006E6F69u, 0x00070006u, 0x00000024u, 0x00000001u, 0x505F6C67u,
+    0x746E696Fu, 0x657A6953u, 0x00000000u, 0x00070006u, 0x00000024u, 0x00000002u, 0x435F6C67u, 0x4470696Cu,
+    0x61747369u, 0x0065636Eu, 0x00070006u, 0x00000024u, 0x00000003u, 0x435F6C67u, 0x446C6C75u, 0x61747369u,
+    0x0065636Eu, 0x00030005u, 0x00000026u, 0x00000000u, 0x00040047u, 0x00000008u, 0x0000000Bu, 0x0000002Au,
+    0x00030047u, 0x00000024u, 0x00000002u, 0x00050048u, 0x00000024u, 0x00000000u, 0x0000000Bu, 0x00000000u,
+    0x00050048u, 0x00000024u, 0x00000001u, 0x0000000Bu, 0x00000001u, 0x00050048u, 0x00000024u, 0x00000002u,
+    0x0000000Bu, 0x00000003u, 0x00050048u, 0x00000024u, 0x00000003u, 0x0000000Bu, 0x00000004u, 0x00020013u,
+    0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00040015u, 0x00000006u, 0x00000020u, 0x00000001u,
+    0x00040020u, 0x00000007u, 0x00000001u, 0x00000006u, 0x0004003Bu, 0x00000007u, 0x00000008u, 0x00000001u,
+    0x0004002Bu, 0x00000006u, 0x0000000Au, 0x00000000u, 0x00020014u, 0x0000000Bu, 0x00030016u, 0x0000000Fu,
+    0x00000020u, 0x00040017u, 0x00000010u, 0x0000000Fu, 0x00000002u, 0x00040020u, 0x00000011u, 0x00000007u,
+    0x00000010u, 0x0004002Bu, 0x0000000Fu, 0x00000013u, 0xBF800000u, 0x0005002Cu, 0x00000010u, 0x00000014u,
+    0x00000013u, 0x00000013u, 0x0004002Bu, 0x00000006u, 0x00000017u, 0x00000001u, 0x0004002Bu, 0x0000000Fu,
+    0x0000001Bu, 0x3F800000u, 0x0005002Cu, 0x00000010u, 0x0000001Cu, 0x0000001Bu, 0x00000013u, 0x0004002Bu,
+    0x0000000Fu, 0x0000001Eu, 0x00000000u, 0x0005002Cu, 0x00000010u, 0x0000001Fu, 0x0000001Eu, 0x0000001Bu,
+    0x00040017u, 0x00000020u, 0x0000000Fu, 0x00000004u, 0x00040015u, 0x00000021u, 0x00000020u, 0x00000000u,
+    0x0004002Bu, 0x00000021u, 0x00000022u, 0x00000001u, 0x0004001Cu, 0x00000023u, 0x0000000Fu, 0x00000022u,
+    0x0006001Eu, 0x00000024u, 0x00000020u, 0x0000000Fu, 0x00000023u, 0x00000023u, 0x00040020u, 0x00000025u,
+    0x00000003u, 0x00000024u, 0x0004003Bu, 0x00000025u, 0x00000026u, 0x00000003u, 0x00040020u, 0x0000002Bu,
+    0x00000003u, 0x00000020u, 0x00050036u, 0x00000002u, 0x00000004u, 0x00000000u, 0x00000003u, 0x000200F8u,
+    0x00000005u, 0x0004003Bu, 0x00000011u, 0x00000012u, 0x00000007u, 0x0004003Du, 0x00000006u, 0x00000009u,
+    0x00000008u, 0x000500AAu, 0x0000000Bu, 0x0000000Cu, 0x00000009u, 0x0000000Au, 0x000300F7u, 0x0000000Eu,
+    0x00000000u, 0x000400FAu, 0x0000000Cu, 0x0000000Du, 0x00000015u, 0x000200F8u, 0x0000000Du, 0x0003003Eu,
+    0x00000012u, 0x00000014u, 0x000200F9u, 0x0000000Eu, 0x000200F8u, 0x00000015u, 0x0004003Du, 0x00000006u,
+    0x00000016u, 0x00000008u, 0x000500AAu, 0x0000000Bu, 0x00000018u, 0x00000016u, 0x00000017u, 0x000300F7u,
+    0x0000001Au, 0x00000000u, 0x000400FAu, 0x00000018u, 0x00000019u, 0x0000001Du, 0x000200F8u, 0x00000019u,
+    0x0003003Eu, 0x00000012u, 0x0000001Cu, 0x000200F9u, 0x0000001Au, 0x000200F8u, 0x0000001Du, 0x0003003Eu,
+    0x00000012u, 0x0000001Fu, 0x000200F9u, 0x0000001Au, 0x000200F8u, 0x0000001Au, 0x000200F9u, 0x0000000Eu,
+    0x000200F8u, 0x0000000Eu, 0x0004003Du, 0x00000010u, 0x00000027u, 0x00000012u, 0x00050051u, 0x0000000Fu,
+    0x00000028u, 0x00000027u, 0x00000000u, 0x00050051u, 0x0000000Fu, 0x00000029u, 0x00000027u, 0x00000001u,
+    0x00070050u, 0x00000020u, 0x0000002Au, 0x00000028u, 0x00000029u, 0x0000001Eu, 0x0000001Bu, 0x00050041u,
+    0x0000002Bu, 0x0000002Cu, 0x00000026u, 0x0000000Au, 0x0003003Eu, 0x0000002Cu, 0x0000002Au, 0x000100FDu,
+    0x00010038u,
 };
 
 static const std::vector<uint32_t> kFragSpirv = {
-    0x07230203u, 0x00010000u, 0x0000000Eu, 0x0000000Du, 0x00000000u, 0x00020010u, 0x00000000u, 0x00030013u, 0x00000000u, 0x00000001u, 0x00040003u, 0x00000005u,
-    0x00000007u, 0x00000000u, 0x00030007u, 0x00000005u, 0x00000006u, 0x0000000Cu, 0x6E69616Du, 0x00000000u, 0x00030007u, 0x00000009u, 0x0000000Au, 0x0000000Cu,
-    0x67617266u, 0x6F6C6F43u, 0x00000072u, 0x00020014u, 0x00000001u, 0x00030015u, 0x00000002u, 0x00000020u, 0x00040017u, 0x00000003u, 0x00000002u, 0x00000004u,
-    0x00020016u, 0x00000004u, 0x00040019u, 0x00000008u, 0x00000003u, 0x00000001u, 0x0004002Bu, 0x0000000Bu, 0x00000002u, 0x3F800000u, 0x0007002Du, 0x0000000Cu,
-    0x00000003u, 0x0000000Bu, 0x0000000Bu, 0x0000000Bu, 0x0000000Bu, 0x0004003Bu, 0x00000008u, 0x00000009u, 0x00000003u, 0x00040047u, 0x00000009u, 0x00000001u,
-    0x00000000u, 0x00040036u, 0x00000005u, 0x00000004u, 0x00000001u, 0x000200F9u, 0x00000000u, 0x00030040u, 0x00000009u, 0x0000000Cu, 0x00010039u, 0x00010038u,
+    0x07230203u, 0x00010000u, 0x0008000Bu, 0x0000000Fu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000Bu,
+    0x00000001u, 0x4C534C47u, 0x6474732Eu, 0x3035342Eu, 0x00000000u, 0x0003000Eu, 0x00000000u, 0x00000001u,
+    0x0006000Fu, 0x00000004u, 0x00000004u, 0x6E69616Du, 0x00000000u, 0x00000009u, 0x00030010u, 0x00000004u,
+    0x00000007u, 0x00030003u, 0x00000002u, 0x000001C2u, 0x00090004u, 0x415F4C47u, 0x735F4252u, 0x72617065u,
+    0x5F657461u, 0x64616873u, 0x6F5F7265u, 0x63656A62u, 0x00007374u, 0x00040005u, 0x00000004u, 0x6E69616Du,
+    0x00000000u, 0x00040005u, 0x00000009u, 0x6C6F436Fu, 0x0000726Fu, 0x00030047u, 0x00000009u, 0x00000000u,
+    0x00040047u, 0x00000009u, 0x0000001Eu, 0x00000000u, 0x00020013u, 0x00000002u, 0x00030021u, 0x00000003u,
+    0x00000002u, 0x00030016u, 0x00000006u, 0x00000020u, 0x00040017u, 0x00000007u, 0x00000006u, 0x00000004u,
+    0x00040020u, 0x00000008u, 0x00000003u, 0x00000007u, 0x0004003Bu, 0x00000008u, 0x00000009u, 0x00000003u,
+    0x0004002Bu, 0x00000006u, 0x0000000Au, 0x3F6B851Fu, 0x0004002Bu, 0x00000006u, 0x0000000Bu, 0x3F70A3D7u,
+    0x0004002Bu, 0x00000006u, 0x0000000Cu, 0x3F7AE148u, 0x0004002Bu, 0x00000006u, 0x0000000Du, 0x3F800000u,
+    0x0007002Cu, 0x00000007u, 0x0000000Eu, 0x0000000Au, 0x0000000Bu, 0x0000000Cu, 0x0000000Du, 0x00050036u,
+    0x00000002u, 0x00000004u, 0x00000000u, 0x00000003u, 0x000200F8u, 0x00000005u, 0x0003003Eu, 0x00000009u,
+    0x0000000Eu, 0x000100FDu, 0x00010038u,
 };
 
 VulkanPipeline::~VulkanPipeline() {
-    // shutdown is called explicitly
+    shutdown();
 }
 
 bool VulkanPipeline::init(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
                           VkDescriptorSetLayout descriptorSetLayout) {
     device_ = device;
 
-    // Pipeline layout
+    // Create pipeline layout from the descriptor set layout
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
@@ -67,51 +100,6 @@ bool VulkanPipeline::init(VkDevice device, VkRenderPass renderPass, VkExtent2D e
         return false;
     }
 
-    // Create geometry pipeline (subpass 0)
-    if (!createGraphicsPipeline(renderPass, 0, vertModule, fragModule, geometryPipeline_)) {
-        LOGE("Failed to create geometry pipeline");
-        vkDestroyShaderModule(device_, vertModule, nullptr);
-        vkDestroyShaderModule(device_, fragModule, nullptr);
-        vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
-        pipelineLayout_ = VK_NULL_HANDLE;
-        return false;
-    }
-
-    // Create lighting pipeline (subpass 1)
-    if (!createGraphicsPipeline(renderPass, 1, vertModule, fragModule, lightingPipeline_)) {
-        LOGE("Failed to create lighting pipeline");
-        vkDestroyPipeline(device_, geometryPipeline_, nullptr);
-        geometryPipeline_ = VK_NULL_HANDLE;
-        vkDestroyShaderModule(device_, vertModule, nullptr);
-        vkDestroyShaderModule(device_, fragModule, nullptr);
-        vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
-        pipelineLayout_ = VK_NULL_HANDLE;
-        return false;
-    }
-
-    // Shader modules no longer needed after pipeline creation
-    vkDestroyShaderModule(device_, vertModule, nullptr);
-    vkDestroyShaderModule(device_, fragModule, nullptr);
-
-    LOGI("Vulkan pipelines created (geometry + lighting)");
-    return true;
-}
-
-void VulkanPipeline::shutdown() {
-    if (geometryPipeline_ != VK_NULL_HANDLE) {
-        vkDestroyPipeline(device_, geometryPipeline_, nullptr);
-    }
-    if (lightingPipeline_ != VK_NULL_HANDLE) {
-        vkDestroyPipeline(device_, lightingPipeline_, nullptr);
-    }
-    if (pipelineLayout_ != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
-    }
-}
-
-bool VulkanPipeline::createGraphicsPipeline(VkRenderPass renderPass, uint32_t subpass,
-                                             VkShaderModule vertModule, VkShaderModule fragModule,
-                                             VkPipeline& outPipeline) {
     // Pipeline shader stages
     VkPipelineShaderStageCreateInfo vertStage{};
     vertStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -127,7 +115,7 @@ bool VulkanPipeline::createGraphicsPipeline(VkRenderPass renderPass, uint32_t su
 
     VkPipelineShaderStageCreateInfo stages[] = {vertStage, fragStage};
 
-    // Vertex input
+    // Vertex input: none (uses gl_VertexIndex)
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = 0;
@@ -139,7 +127,7 @@ bool VulkanPipeline::createGraphicsPipeline(VkRenderPass renderPass, uint32_t su
     inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-    // Viewport and scissor
+    // Viewport and scissor (dynamic)
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     viewportState.viewportCount = 1;
@@ -152,7 +140,7 @@ bool VulkanPipeline::createGraphicsPipeline(VkRenderPass renderPass, uint32_t su
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
     rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
 
@@ -162,14 +150,11 @@ bool VulkanPipeline::createGraphicsPipeline(VkRenderPass renderPass, uint32_t su
     multisampling.sampleShadingEnable = VK_FALSE;
     multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-    // Depth/stencil
+    // Depth/stencil: disabled
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencil.depthTestEnable = VK_TRUE;
-    depthStencil.depthWriteEnable = VK_TRUE;
-    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-    depthStencil.depthBoundsTestEnable = VK_FALSE;
-    depthStencil.stencilTestEnable = VK_FALSE;
+    depthStencil.depthTestEnable = VK_FALSE;
+    depthStencil.depthWriteEnable = VK_FALSE;
 
     // Color blending
     VkPipelineColorBlendAttachmentState colorBlendAttachment{};
@@ -209,16 +194,36 @@ bool VulkanPipeline::createGraphicsPipeline(VkRenderPass renderPass, uint32_t su
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = pipelineLayout_;
     pipelineInfo.renderPass = renderPass;
-    pipelineInfo.subpass = subpass;
+    pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-    VkResult result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &outPipeline);
+    VkResult result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_);
     if (result != VK_SUCCESS) {
         LOGE("Failed to create graphics pipeline: %d", result);
+        vkDestroyShaderModule(device_, vertModule, nullptr);
+        vkDestroyShaderModule(device_, fragModule, nullptr);
+        vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
+        pipelineLayout_ = VK_NULL_HANDLE;
         return false;
     }
 
+    // Shader modules no longer needed after pipeline creation
+    vkDestroyShaderModule(device_, vertModule, nullptr);
+    vkDestroyShaderModule(device_, fragModule, nullptr);
+
+    LOGI("Vulkan pipeline created");
     return true;
+}
+
+void VulkanPipeline::shutdown() {
+    if (pipeline_ != VK_NULL_HANDLE) {
+        vkDestroyPipeline(device_, pipeline_, nullptr);
+        pipeline_ = VK_NULL_HANDLE;
+    }
+    if (pipelineLayout_ != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
+        pipelineLayout_ = VK_NULL_HANDLE;
+    }
 }
 
 VkShaderModule VulkanPipeline::createShaderModule(const std::vector<uint32_t>& code) {

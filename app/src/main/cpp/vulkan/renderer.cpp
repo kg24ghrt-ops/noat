@@ -67,8 +67,6 @@ bool PaperRenderer::init(void* nativeWindow) {
         LOGE("Failed to create pipeline");
         return false;
     }
-
-    // Create frames (one per swapchain image)
     frames_.resize(imageCount);
     for (uint32_t i = 0; i < imageCount; ++i) {
         frames_[i] = std::make_unique<VulkanFrame>();
@@ -177,14 +175,8 @@ void PaperRenderer::renderFrame() {
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = renderPass_->renderPass();
 
-    // Create framebuffer for this image (color + normal + depth + swapchain)
-    // For simplicity, create framebuffers lazily here
+    // Create framebuffer for this image (single color attachment)
     std::vector<VkImageView> attachments = {
-        // We'll use swapchain image view as both color input and final output
-        // In a full implementation, we'd have separate G-buffer attachments
-        context_->swapchainImageViews()[imageIndex],
-        context_->swapchainImageViews()[imageIndex],
-        context_->swapchainImageViews()[imageIndex],
         context_->swapchainImageViews()[imageIndex],
     };
 
@@ -209,52 +201,36 @@ void PaperRenderer::renderFrame() {
     renderPassInfo.renderArea.extent = {static_cast<uint32_t>(context_->width()),
                                         static_cast<uint32_t>(context_->height())};
 
-    // Clear values
-    std::array<VkClearValue, 4> clearValues{};
+    // Clear values (single color attachment)
+    std::array<VkClearValue, 1> clearValues{};
     clearValues[0].color = {{0.95f, 0.95f, 0.90f, 1.0f}};
-    clearValues[1].color = {{0.0f, 0.0f, 0.0f, 0.0f}};
-    clearValues[2].depthStencil = {1.0f, 0};
-    clearValues[3].color = {{0.0f, 0.0f, 0.0f, 0.0f}};
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
     vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    // Geometry subpass (subpass 0)
-    if (pipeline_->geometryPipeline() != VK_NULL_HANDLE) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->geometryPipeline());
+    // Draw paper (3 vertices for a full-screen triangle, no index buffer needed)
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->pipeline());
 
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(context_->width());
-        viewport.height = static_cast<float>(context_->height());
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = static_cast<float>(context_->width());
+    viewport.height = static_cast<float>(context_->height());
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = renderPassInfo.renderArea.extent;
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = renderPassInfo.renderArea.extent;
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        // Bind descriptor sets
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->pipelineLayout(),
-                                0, 1, &resources_->descriptorSets()[currentFrame_], 0, nullptr);
+    // Bind descriptor sets
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->pipelineLayout(),
+                            0, 1, &resources_->descriptorSets()[currentFrame_], 0, nullptr);
 
-        // Draw paper (3 vertices for a full-screen triangle, no index buffer needed)
-        vkCmdDraw(cmd, 3, 1, 0, 0);
-    }
-
-    // Next subpass: Lighting (subpass 1)
-    vkCmdNextSubpass(cmd, VK_SUBPASS_CONTENTS_INLINE);
-
-    if (pipeline_->lightingPipeline() != VK_NULL_HANDLE) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->lightingPipeline());
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->pipelineLayout(),
-                                0, 1, &resources_->descriptorSets()[currentFrame_], 0, nullptr);
-        vkCmdDraw(cmd, 3, 1, 0, 0);
-    }
+    vkCmdDraw(cmd, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(cmd);
 
