@@ -140,7 +140,7 @@ Java_com_example_noat_PaperLib_paperRenderFrame(JNIEnv* env, jobject /* thiz */)
     (void)env;
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
     if (!g_renderer) {
-        LOGW("paperRenderFrame called but renderer not initialized");
+        // Renderer failed to initialize; skip silently to avoid log spam
         return;
     }
     LOGI("paperRenderFrame called");
