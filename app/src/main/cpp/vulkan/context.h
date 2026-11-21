@@ -38,6 +38,9 @@ public:
     int height() const { return swapchain_.height; }
     uint32_t graphicsQueueFamily() const { return graphicsQueueFamily_; }
 
+    // True if VK_LAYER_KHRONOS_validation was enabled on instance or device
+    bool validationLayersActive() const { return validationLayersActive_; }
+
     // Swapchain images and views
     const std::vector<VkImage>& swapchainImages() const { return swapchain_.images; }
     const std::vector<VkImageView>& swapchainImageViews() const { return swapchain_.imageViews; }
@@ -70,4 +73,5 @@ private:
     SwapchainData swapchain_;
 
     bool initialized_ = false;
+    bool validationLayersActive_ = false;
 };
