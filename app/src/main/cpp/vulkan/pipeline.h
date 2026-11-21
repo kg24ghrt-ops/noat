@@ -15,7 +15,7 @@ public:
     VulkanPipeline& operator=(const VulkanPipeline&) = delete;
 
     bool init(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
-              VkPipelineLayout pipelineLayout);
+              VkDescriptorSetLayout descriptorSetLayout);
     void shutdown();
 
     VkPipeline pipeline() const { return pipeline_; }
