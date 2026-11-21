@@ -22,9 +22,7 @@ android {
                 cppFlags += "-std=c++17"
                 arguments += "-DANDROID_STL=c++_shared"
                 abiFilters += listOf(
-                    "armeabi-v7a",
                     "arm64-v8a",
-                    "x86",
                     "x86_64"
                 )
             }
