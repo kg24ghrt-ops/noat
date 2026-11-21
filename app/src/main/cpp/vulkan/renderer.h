@@ -88,8 +88,8 @@ private:
     // Selected paper size (stable id) and its aspect ratio (width/height).
     std::string paperSizeId_;
     float paperAspect_ = 1.0f;
-    int surfaceWidth_ = 0;
-    int surfaceHeight_ = 0;
+    float paperWidthMm_ = 210.0f;   // A4 width  (mm)
+    float paperHeightMm_ = 297.0f;  // A4 height (mm)
 
     bool initialized_ = false;
 };

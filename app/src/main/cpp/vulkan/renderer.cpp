@@ -10,7 +10,6 @@
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include <array>
-#include <algorithm>
 #include <cstdint>
 #include <cstring>
 
@@ -150,9 +149,6 @@ bool PaperRenderer::resize(int width, int height) {
     if (!initialized_) return false;
     if (!context_->resize(width, height)) return false;
 
-    surfaceWidth_ = width;
-    surfaceHeight_ = height;
-
     LOGI("Paper renderer surface %dx%d", width, height);
     resources_->shutdown();
     uint32_t imageCount = static_cast<uint32_t>(context_->swapchainImages().size());
@@ -199,8 +195,11 @@ void PaperRenderer::setPaperSize(const char* sizeId) {
         return;
     }
     paperSizeId_ = sizeId;
+    paperWidthMm_ = size->widthMm;
+    paperHeightMm_ = size->heightMm;
     paperAspect_ = size->aspect();
-    LOGI("Paper size set to %s (%s), aspect=%.4f", sizeId, size->name, paperAspect_);
+    LOGI("Paper size set to %s (%s), %.0fx%.0f mm, aspect=%.4f", sizeId, size->name,
+         size->widthMm, size->heightMm, paperAspect_);
 }
 
 void PaperRenderer::renderFrame() {
@@ -300,61 +299,44 @@ void PaperRenderer::renderFrame() {
         vkResetFences(device, 1, &resetFence4);
         return;
     }
-    LOGI("renderFrame #%u: pipeline bound, drawing 3 vertices", currentFrame_);
+    LOGI("renderFrame #%u: pipeline bound, drawing 6 vertices (quad)", currentFrame_);
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-    // Compute paper rect inside the surface, preserving aspect ratio with a margin.
-    int sw = (surfaceWidth_ > 0) ? surfaceWidth_ : context_->width();
-    int sh = (surfaceHeight_ > 0) ? surfaceHeight_ : context_->height();
-    if (sw <= 0 || sh <= 0) {
-        sw = context_->width();
-        sh = context_->height();
-    }
-
-    const float marginFraction = 0.05f; // 5% margin on each side
-    float margin = marginFraction * static_cast<float>(std::min(sw, sh));
-    float availW = static_cast<float>(sw) - 2.0f * margin;
-    float availH = static_cast<float>(sh) - 2.0f * margin;
-
-    float paperW, paperH;
-    if (availW / availH > paperAspect_) {
-        paperH = availH;
-        paperW = paperH * paperAspect_;
-    } else {
-        paperW = availW;
-        paperH = paperW / paperAspect_;
-    }
-
-    int x = static_cast<int>((static_cast<float>(sw) - paperW) * 0.5f);
-    int y = static_cast<int>((static_cast<float>(sh) - paperH) * 0.5f);
-    int w = static_cast<int>(paperW);
-    int h = static_cast<int>(paperH);
-    if (w < 1) w = 1;
-    if (h < 1) h = 1;
-
-    LOGI("renderFrame #%u: paper rect %dx%d at (%d,%d) of %dx%d (aspect=%.4f)",
-         currentFrame_, w, h, x, y, sw, sh, paperAspect_);
-
+    // Full-screen viewport / scissor (the shader letterboxes the paper).
     VkViewport viewport{};
-    viewport.x = static_cast<float>(x);
-    viewport.y = static_cast<float>(y);
-    viewport.width = static_cast<float>(w);
-    viewport.height = static_cast<float>(h);
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = static_cast<float>(context_->width());
+    viewport.height = static_cast<float>(context_->height());
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(cmd, 0, 1, &viewport);
 
     VkRect2D scissor{};
-    scissor.offset = {x, y};
-    scissor.extent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
+    scissor.offset = {0, 0};
+    scissor.extent = renderPassInfo.renderArea.extent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    // Push constants: paper physical dims + surface dims (pixels).
+    PushConstantBlock pc{};
+    pc.paperWidthMm = paperWidthMm_;
+    pc.paperHeightMm = paperHeightMm_;
+    pc.surfaceWidth = static_cast<float>(context_->width());
+    pc.surfaceHeight = static_cast<float>(context_->height());
+    vkCmdPushConstants(cmd, pipeline_->pipelineLayout(),
+                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBlock), &pc);
+
+    LOGI("renderFrame #%u: paper %.0fx%.0f mm (aspect=%.4f), surface %dx%d px",
+         currentFrame_, paperWidthMm_, paperHeightMm_, paperAspect_,
+         context_->width(), context_->height());
 
     // Bind descriptor sets
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->pipelineLayout(),
                             0, 1, &resources_->descriptorSets()[currentFrame_], 0, nullptr);
 
-    vkCmdDraw(cmd, 3, 1, 0, 0);
+    // Draw a quad as two triangles (6 vertices), clockwise winding.
+    vkCmdDraw(cmd, 6, 1, 0, 0);
 
     vkCmdEndRenderPass(cmd);
 
