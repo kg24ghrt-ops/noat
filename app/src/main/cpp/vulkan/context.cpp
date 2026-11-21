@@ -99,6 +99,35 @@ bool VulkanContext::resize(int width, int height) {
 }
 
 bool VulkanContext::createInstance() {
+    // Enumerate available instance extensions for logging and filtering
+    uint32_t extCount = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &extCount, nullptr);
+    std::vector<VkExtensionProperties> availableExts(extCount);
+    vkEnumerateInstanceExtensionProperties(nullptr, &extCount, availableExts.data());
+
+    LOGI("Available Vulkan instance extensions:");
+    for (const auto& ext : availableExts) {
+        LOGI("  %s (spec %u)", ext.extensionName, ext.specVersion);
+    }
+
+    // Filter to only extensions that are actually available
+    std::vector<const char*> enabledExtensions;
+    for (const char* req : kInstanceExtensions) {
+        bool found = false;
+        for (const auto& avail : availableExts) {
+            if (strcmp(req, avail.extensionName) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            enabledExtensions.push_back(req);
+            LOGI("Enabling extension: %s", req);
+        } else {
+            LOGW("Extension not available, skipping: %s", req);
+        }
+    }
+
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "noat";
@@ -110,8 +139,8 @@ bool VulkanContext::createInstance() {
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
-    createInfo.enabledExtensionCount = static_cast<uint32_t>(kInstanceExtensions.size());
-    createInfo.ppEnabledExtensionNames = kInstanceExtensions.data();
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size());
+    createInfo.ppEnabledExtensionNames = enabledExtensions.data();
 
     // Optional validation layers (only in debug)
 #ifdef NDEBUG
@@ -122,6 +151,13 @@ bool VulkanContext::createInstance() {
 #endif
 
     VkResult result = vkCreateInstance(&createInfo, nullptr, &instance_);
+    if (result == VK_ERROR_INCOMPATIBLE_DRIVER) {
+        // Fall back to Vulkan 1.0 if 1.1 is not supported
+        LOGW("Vulkan 1.1 not supported (%d), falling back to 1.0", result);
+        appInfo.apiVersion = VK_API_VERSION_1_0;
+        result = vkCreateInstance(&createInfo, nullptr, &instance_);
+    }
+
     if (result != VK_SUCCESS) {
         LOGE("Failed to create Vulkan instance: %d", result);
         return false;
