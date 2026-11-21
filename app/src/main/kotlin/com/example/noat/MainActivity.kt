@@ -43,6 +43,8 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
 
         // Initialize Vulkan rendering surface
         vulkanSurface = findViewById(R.id.vulkan_surface)
+        vulkanSurface.setZOrderOnTop(true)
+        vulkanSurface.holder.setFormat(android.graphics.PixelFormat.RGBA_8888)
         vulkanSurface.holder.addCallback(this)
 
         // Show engine info in the TextView

@@ -140,24 +140,34 @@ void PaperRenderer::setMaterial(const PaperMaterialParams& material) {
 }
 
 void PaperRenderer::renderFrame() {
-    if (!initialized_) return;
+    if (!initialized_) {
+        LOGW("renderFrame called but renderer not initialized");
+        return;
+    }
 
     VkDevice device = context_->device();
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
     // Wait for previous frame to finish
     VkFence waitFence = frames_[currentFrame_]->inFlightFence();
-    vkWaitForFences(device, 1, &waitFence, VK_TRUE, UINT64_MAX);
+    VkResult waitResult = vkWaitForFences(device, 1, &waitFence, VK_TRUE, UINT64_MAX);
+    if (waitResult != VK_SUCCESS) {
+        LOGE("vkWaitForFences failed: %d", waitResult);
+        return;
+    }
 
     // Acquire next swapchain image
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(device, context_->swapchain(), UINT64_MAX,
                                             frames_[currentFrame_]->imageAvailableSemaphore(),
                                             VK_NULL_HANDLE, &imageIndex);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        // Handle swapchain out of date (should call resize, but we don't have dimensions)
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         VkFence resetFence = frames_[currentFrame_]->inFlightFence();
         vkResetFences(device, 1, &resetFence);
+        return;
+    }
+    if (result != VK_SUCCESS) {
+        LOGE("vkAcquireNextImageKHR failed: %d", result);
         return;
     }
 
@@ -209,7 +219,18 @@ void PaperRenderer::renderFrame() {
     vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     // Draw paper (3 vertices for a full-screen triangle, no index buffer needed)
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_->pipeline());
+    VkPipeline pipeline = pipeline_->pipeline();
+    if (pipeline == VK_NULL_HANDLE) {
+        LOGE("Pipeline is null - cannot draw");
+        vkCmdEndRenderPass(cmd);
+        frames_[currentFrame_]->endCommandBuffer();
+        vkDestroyFramebuffer(device, framebuffer, nullptr);
+        VkFence resetFence4 = frames_[currentFrame_]->inFlightFence();
+        vkResetFences(device, 1, &resetFence4);
+        return;
+    }
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -252,6 +273,8 @@ void PaperRenderer::renderFrame() {
     if (vkQueueSubmit(context_->graphicsQueue(), 1, &submitInfo,
                       frames_[currentFrame_]->inFlightFence()) != VK_SUCCESS) {
         LOGE("Failed to submit draw command buffer");
+        vkDestroyFramebuffer(device, framebuffer, nullptr);
+        return;
     }
 
     // Present
@@ -265,7 +288,12 @@ void PaperRenderer::renderFrame() {
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.pResults = nullptr;
 
-    vkQueuePresentKHR(context_->graphicsQueue(), &presentInfo);
+    VkResult presentResult = vkQueuePresentKHR(context_->graphicsQueue(), &presentInfo);
+    if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
+        // Swapchain needs recreation - will be handled on next frame
+    } else if (presentResult != VK_SUCCESS) {
+        LOGE("vkQueuePresentKHR failed: %d", presentResult);
+    }
 
     vkDestroyFramebuffer(device, framebuffer, nullptr);
 
