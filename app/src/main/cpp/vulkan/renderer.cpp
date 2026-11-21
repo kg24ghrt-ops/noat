@@ -62,8 +62,8 @@ bool PaperRenderer::init(void* nativeWindow) {
         LOGE("Failed to create resources");
         return false;
     }
-    LOGI("Resources created, descriptorSetLayout=%p, descriptorSets=%zu",
-         static_cast<void*>(resources_->descriptorSetLayout()),
+    LOGI("Resources created, descriptorSetLayout=%llu, descriptorSets=%zu",
+         static_cast<unsigned long long>(resources_->descriptorSetLayout()),
          resources_->descriptorSets().size());
 
     // Create pipeline using the descriptor set layout from resources
@@ -75,9 +75,9 @@ bool PaperRenderer::init(void* nativeWindow) {
         LOGE("Failed to create pipeline");
         return false;
     }
-    LOGI("Pipeline created, pipeline=%p, layout=%p",
-         static_cast<void*>(pipeline_->pipeline()),
-         static_cast<void*>(pipeline_->pipelineLayout()));
+    LOGI("Pipeline created, pipeline=%llu, layout=%llu",
+         static_cast<unsigned long long>(pipeline_->pipeline()),
+         static_cast<unsigned long long>(pipeline_->pipelineLayout()));
 
     frames_.resize(imageCount);
     for (uint32_t i = 0; i < imageCount; ++i) {
