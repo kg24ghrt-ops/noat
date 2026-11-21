@@ -69,6 +69,8 @@ bool PaperRenderer::init(void* nativeWindow) {
     LOGI("Vulkan context initialized, format=%d, size=%dx%d, imageCount=%zu",
          context_->swapchainFormat(), context_->width(), context_->height(),
          context_->swapchainImages().size());
+    LOGI("Validation layers active: %s",
+         context_->validationLayersActive() ? "true" : "false");
 
     // Create render pass
     renderPass_ = std::make_unique<VulkanRenderPass>();

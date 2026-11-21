@@ -169,6 +169,7 @@ bool VulkanContext::createInstance() {
         if (found) {
             enabledLayers.push_back(req);
             LOGI("Enabling validation layer: %s", req);
+            validationLayersActive_ = true;
         } else {
             LOGW("Validation layer not available, skipping: %s", req);
         }
@@ -317,6 +318,7 @@ bool VulkanContext::createLogicalDevice() {
         if (found) {
             enabledDeviceLayers.push_back(req);
             LOGI("Enabling validation layer: %s", req);
+            validationLayersActive_ = true;
         } else {
             LOGW("Validation layer not available, skipping: %s", req);
         }
