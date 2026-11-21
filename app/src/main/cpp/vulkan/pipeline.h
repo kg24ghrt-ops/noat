@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include <vector>
 
 // Graphics pipeline for the paper renderer.
 // Shader SPIR-V is compiled from GLSL (shaders/triangle.vert, shaders/paper_geom.frag)
