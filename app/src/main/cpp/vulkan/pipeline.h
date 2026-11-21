@@ -3,8 +3,17 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 
+// Push constants sent to the vertex shader each frame. Layout must match the
+// `PushConstants` block in paper_quad.vert exactly (std140 scalar order).
+struct PushConstantBlock {
+    float paperWidthMm;    // physical paper width  (mm)
+    float paperHeightMm;   // physical paper height (mm)
+    float surfaceWidth;    // surface width  (pixels)
+    float surfaceHeight;   // surface height (pixels)
+};
+
 // Graphics pipeline for the paper renderer.
-// Shader SPIR-V is compiled from GLSL (shaders/triangle.vert, shaders/paper_geom.frag)
+// Shader SPIR-V is compiled from GLSL (shaders/paper_quad.vert, shaders/paper_quad.frag)
 // with glslangValidator and embedded as byte arrays.
 class VulkanPipeline {
 public:
