@@ -99,6 +99,35 @@ bool VulkanContext::resize(int width, int height) {
 }
 
 bool VulkanContext::createInstance() {
+    // Enumerate available instance extensions for logging and filtering
+    uint32_t extCount = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &extCount, nullptr);
+    std::vector<VkExtensionProperties> availableExts(extCount);
+    vkEnumerateInstanceExtensionProperties(nullptr, &extCount, availableExts.data());
+
+    LOGI("Available Vulkan instance extensions:");
+    for (const auto& ext : availableExts) {
+        LOGI("  %s (spec %u)", ext.extensionName, ext.specVersion);
+    }
+
+    // Filter to only extensions that are actually available
+    std::vector<const char*> enabledExtensions;
+    for (const char* req : kInstanceExtensions) {
+        bool found = false;
+        for (const auto& avail : availableExts) {
+            if (strcmp(req, avail.extensionName) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            enabledExtensions.push_back(req);
+            LOGI("Enabling extension: %s", req);
+        } else {
+            LOGW("Extension not available, skipping: %s", req);
+        }
+    }
+
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "noat";
@@ -110,18 +139,53 @@ bool VulkanContext::createInstance() {
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
-    createInfo.enabledExtensionCount = static_cast<uint32_t>(kInstanceExtensions.size());
-    createInfo.ppEnabledExtensionNames = kInstanceExtensions.data();
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size());
+    createInfo.ppEnabledExtensionNames = enabledExtensions.data();
 
     // Optional validation layers (only in debug)
 #ifdef NDEBUG
     createInfo.enabledLayerCount = 0;
 #else
-    createInfo.enabledLayerCount = static_cast<uint32_t>(kValidationLayers.size());
-    createInfo.ppEnabledLayerNames = kValidationLayers.data();
+    // Enumerate available instance layers and enable only those that exist
+    uint32_t layerCount = 0;
+    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+    std::vector<VkLayerProperties> availableLayers(layerCount);
+    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+    LOGI("Available Vulkan instance layers:");
+    for (const auto& layer : availableLayers) {
+        LOGI("  %s (spec %u)", layer.layerName, layer.specVersion);
+    }
+
+    std::vector<const char*> enabledLayers;
+    for (const char* req : kValidationLayers) {
+        bool found = false;
+        for (const auto& avail : availableLayers) {
+            if (strcmp(req, avail.layerName) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            enabledLayers.push_back(req);
+            LOGI("Enabling validation layer: %s", req);
+        } else {
+            LOGW("Validation layer not available, skipping: %s", req);
+        }
+    }
+
+    createInfo.enabledLayerCount = static_cast<uint32_t>(enabledLayers.size());
+    createInfo.ppEnabledLayerNames = enabledLayers.data();
 #endif
 
     VkResult result = vkCreateInstance(&createInfo, nullptr, &instance_);
+    if (result == VK_ERROR_INCOMPATIBLE_DRIVER) {
+        // Fall back to Vulkan 1.0 if 1.1 is not supported
+        LOGW("Vulkan 1.1 not supported (%d), falling back to 1.0", result);
+        appInfo.apiVersion = VK_API_VERSION_1_0;
+        result = vkCreateInstance(&createInfo, nullptr, &instance_);
+    }
+
     if (result != VK_SUCCESS) {
         LOGE("Failed to create Vulkan instance: %d", result);
         return false;
@@ -230,8 +294,36 @@ bool VulkanContext::createLogicalDevice() {
 #ifdef NDEBUG
     createInfo.enabledLayerCount = 0;
 #else
-    createInfo.enabledLayerCount = static_cast<uint32_t>(kValidationLayers.size());
-    createInfo.ppEnabledLayerNames = kValidationLayers.data();
+    // Enumerate available device layers and enable only those that exist
+    uint32_t deviceLayerCount = 0;
+    vkEnumerateDeviceLayerProperties(physicalDevice_, &deviceLayerCount, nullptr);
+    std::vector<VkLayerProperties> deviceAvailableLayers(deviceLayerCount);
+    vkEnumerateDeviceLayerProperties(physicalDevice_, &deviceLayerCount, deviceAvailableLayers.data());
+
+    LOGI("Available Vulkan device layers:");
+    for (const auto& layer : deviceAvailableLayers) {
+        LOGI("  %s (spec %u)", layer.layerName, layer.specVersion);
+    }
+
+    std::vector<const char*> enabledDeviceLayers;
+    for (const char* req : kValidationLayers) {
+        bool found = false;
+        for (const auto& avail : deviceAvailableLayers) {
+            if (strcmp(req, avail.layerName) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            enabledDeviceLayers.push_back(req);
+            LOGI("Enabling validation layer: %s", req);
+        } else {
+            LOGW("Validation layer not available, skipping: %s", req);
+        }
+    }
+
+    createInfo.enabledLayerCount = static_cast<uint32_t>(enabledDeviceLayers.size());
+    createInfo.ppEnabledLayerNames = enabledDeviceLayers.data();
 #endif
 
     VkResult result = vkCreateDevice(physicalDevice_, &createInfo, nullptr, &device_);
