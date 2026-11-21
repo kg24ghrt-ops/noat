@@ -25,6 +25,7 @@ extern "C" {
 JNIEXPORT void JNICALL
 Java_com_example_noat_PaperLib_paperInitWithSurface(JNIEnv* env, jobject /* thiz */, jobject surface) {
     (void)env;
+    LOGI("paperInitWithSurface called");
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
     if (g_renderer) {
         LOGW("Paper engine already initialized");
@@ -36,6 +37,7 @@ Java_com_example_noat_PaperLib_paperInitWithSurface(JNIEnv* env, jobject /* thiz
         LOGE("Failed to get ANativeWindow from Surface");
         return;
     }
+    LOGI("ANativeWindow acquired: %p", static_cast<void*>(window));
 
     g_renderer = std::make_unique<PaperRenderer>();
     if (!g_renderer->init(window)) {
@@ -137,7 +139,11 @@ JNIEXPORT void JNICALL
 Java_com_example_noat_PaperLib_paperRenderFrame(JNIEnv* env, jobject /* thiz */) {
     (void)env;
     std::lock_guard<std::mutex> lock(g_renderer_mutex);
-    if (!g_renderer) return;
+    if (!g_renderer) {
+        LOGW("paperRenderFrame called but renderer not initialized");
+        return;
+    }
+    LOGI("paperRenderFrame called");
     g_renderer->renderFrame();
 }
 
