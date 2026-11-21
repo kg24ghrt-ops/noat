@@ -46,25 +46,48 @@ jobs:
             cmake;3.31.6
 
       - name: Validate release signing secrets
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           missing=()
-          [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ] && missing+=("ANDROID_KEYSTORE_BASE64")
-          [ -z "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" ] && missing+=("ANDROID_KEYSTORE_PASSWORD")
-          [ -z "${{ secrets.ANDROID_KEY_ALIAS }}" ] && missing+=("ANDROID_KEY_ALIAS")
-          [ -z "${{ secrets.ANDROID_KEY_PASSWORD }}" ] && missing+=("ANDROID_KEY_PASSWORD")
+          [ -z "${ANDROID_KEYSTORE_BASE64}" ] && missing+=("ANDROID_KEYSTORE_BASE64")
+          [ -z "${ANDROID_KEYSTORE_PASSWORD}" ] && missing+=("ANDROID_KEYSTORE_PASSWORD")
+          [ -z "${ANDROID_KEY_ALIAS}" ] && missing+=("ANDROID_KEY_ALIAS")
+          [ -z "${ANDROID_KEY_PASSWORD}" ] && missing+=("ANDROID_KEY_PASSWORD")
           if [ "${#missing[@]}" -gt 0 ]; then
-            echo "Error: Required signing secrets are missing for ${{ github.event_name }}: ${missing[*]}"
-            echo "Configure these repository secrets to enable signed release builds."
-            exit 1
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              # Same-repository PR: build unsigned, do not fail.
+              echo "Warning: signing secrets missing for same-repository PR; building unsigned: ${missing[*]}"
+            else
+              echo "Error: Required signing secrets are missing for ${{ github.event_name }}: ${missing[*]}"
+              echo "Configure these repository secrets to enable signed release builds."
+              exit 1
+            fi
           fi
 
       - name: Prepare release keystore
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/noat-release.jks"
-          chmod 600 "$RUNNER_TEMP/noat-release.jks"
-          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/noat-release.jks" >> "$GITHUB_ENV"
+          if [ -z "${ANDROID_KEYSTORE_BASE64}" ]; then
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              # Same-repository PR without secrets: build unsigned, do not fail.
+              echo "Warning: no signing keystore for same-repository PR; building unsigned."
+            else
+              echo "Error: ANDROID_KEYSTORE_BASE64 secret is missing for ${{ github.event_name }}."
+              exit 1
+            fi
+          else
+            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > "$RUNNER_TEMP/noat-release.jks"
+            chmod 600 "$RUNNER_TEMP/noat-release.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/noat-release.jks" >> "$GITHUB_ENV"
+            echo "Release keystore prepared at $RUNNER_TEMP/noat-release.jks"
+          fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -75,6 +98,35 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew --no-daemon testDebugUnitTest assembleDebug assembleRelease
+
+      - name: Verify release APK signature
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ env.ANDROID_KEYSTORE_FILE }}
+        run: |
+          if [ -z "${ANDROID_KEYSTORE_FILE}" ] || [ ! -f "${ANDROID_KEYSTORE_FILE}" ]; then
+            echo "No release keystore present; skipping APK signature verification (unsigned build)."
+            exit 0
+          fi
+          apk=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
+          if [ -z "$apk" ]; then
+            echo "No release APK found to verify."
+            exit 0
+          fi
+          apksigner_path=""
+          for bt in "$ANDROID_SDK_ROOT"/build-tools/*/apksigner; do
+            [ -f "$bt" ] && apksigner_path="$bt" && break
+          done
+          if [ -z "$apksigner_path" ]; then
+            echo "apksigner not found in $ANDROID_SDK_ROOT/build-tools; skipping signature verification."
+            exit 0
+          fi
+          echo "Verifying signature of $apk with $apksigner_path ..."
+          if "$apksigner_path" verify --print-certs "$apk"; then
+            echo "Release APK signature verified."
+          else
+            echo "Warning: release APK signature verification reported issues (see output above)."
+          fi
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v6

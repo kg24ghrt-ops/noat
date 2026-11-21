@@ -10,12 +10,46 @@
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include <array>
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 
 #define TAG "PaperRenderer"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
+
+namespace {
+// One source of truth for paper sizes. Dimensions in mm, portrait orientation.
+// These ids/dimensions MUST match the Kotlin PaperSize table in MainActivity.kt.
+struct PaperSize {
+    const char* id;          // stable id, passed over JNI (not an ordinal)
+    const char* name;        // human-readable label shown in the UI
+    float widthMm;
+    float heightMm;
+    float aspect() const { return widthMm / heightMm; }
+};
+
+constexpr PaperSize kPaperSizes[] = {
+    {"A3",   "A3",   297.0f, 420.0f},
+    {"A4",   "A4",   210.0f, 297.0f},
+    {"A5",   "A5",   148.0f, 210.0f},
+    {"A6",   "A6",   105.0f, 148.0f},
+    {"LETTER", "Letter", 216.0f, 279.0f},
+    {"LEGAL",  "Legal",  216.0f, 356.0f},
+};
+constexpr size_t kPaperSizeCount = sizeof(kPaperSizes) / sizeof(kPaperSizes[0]);
+constexpr const char* kDefaultPaperSizeId = "A4";
+
+const PaperSize* findPaperSize(const char* id) {
+    for (size_t i = 0; i < kPaperSizeCount; ++i) {
+        if (std::strcmp(kPaperSizes[i].id, id) == 0) {
+            return &kPaperSizes[i];
+        }
+    }
+    return nullptr;
+}
+} // namespace
 
 PaperRenderer::PaperRenderer() = default;
 
@@ -115,7 +149,10 @@ bool PaperRenderer::resize(int width, int height) {
     if (!initialized_) return false;
     if (!context_->resize(width, height)) return false;
 
-    // Recreate resources that depend on swapchain image count
+    surfaceWidth_ = width;
+    surfaceHeight_ = height;
+
+    LOGI("Paper renderer surface %dx%d", width, height);
     resources_->shutdown();
     uint32_t imageCount = static_cast<uint32_t>(context_->swapchainImages().size());
     if (!resources_->init(context_->device(), context_->physicalDevice(), commandPool_,
@@ -152,6 +189,17 @@ void PaperRenderer::setLight(const LightParams& light) {
 
 void PaperRenderer::setMaterial(const PaperMaterialParams& material) {
     material_ = material;
+}
+
+void PaperRenderer::setPaperSize(const char* sizeId) {
+    const PaperSize* size = findPaperSize(sizeId);
+    if (size == nullptr) {
+        LOGE("Unknown paper size id: %s, keeping %s", sizeId, paperSizeId_.c_str());
+        return;
+    }
+    paperSizeId_ = sizeId;
+    paperAspect_ = size->aspect();
+    LOGI("Paper size set to %s (%s), aspect=%.4f", sizeId, size->name, paperAspect_);
 }
 
 void PaperRenderer::renderFrame() {
@@ -255,18 +303,50 @@ void PaperRenderer::renderFrame() {
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
+    // Compute paper rect inside the surface, preserving aspect ratio with a margin.
+    int sw = (surfaceWidth_ > 0) ? surfaceWidth_ : context_->width();
+    int sh = (surfaceHeight_ > 0) ? surfaceHeight_ : context_->height();
+    if (sw <= 0 || sh <= 0) {
+        sw = context_->width();
+        sh = context_->height();
+    }
+
+    const float marginFraction = 0.05f; // 5% margin on each side
+    float margin = marginFraction * static_cast<float>(std::min(sw, sh));
+    float availW = static_cast<float>(sw) - 2.0f * margin;
+    float availH = static_cast<float>(sh) - 2.0f * margin;
+
+    float paperW, paperH;
+    if (availW / availH > paperAspect_) {
+        paperH = availH;
+        paperW = paperH * paperAspect_;
+    } else {
+        paperW = availW;
+        paperH = paperW / paperAspect_;
+    }
+
+    int x = static_cast<int>((static_cast<float>(sw) - paperW) * 0.5f);
+    int y = static_cast<int>((static_cast<float>(sh) - paperH) * 0.5f);
+    int w = static_cast<int>(paperW);
+    int h = static_cast<int>(paperH);
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+
+    LOGI("renderFrame #%u: paper rect %dx%d at (%d,%d) of %dx%d (aspect=%.4f)",
+         currentFrame_, w, h, x, y, sw, sh, paperAspect_);
+
     VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = static_cast<float>(context_->width());
-    viewport.height = static_cast<float>(context_->height());
+    viewport.x = static_cast<float>(x);
+    viewport.y = static_cast<float>(y);
+    viewport.width = static_cast<float>(w);
+    viewport.height = static_cast<float>(h);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(cmd, 0, 1, &viewport);
 
     VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = renderPassInfo.renderArea.extent;
+    scissor.offset = {x, y};
+    scissor.extent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
     // Bind descriptor sets

@@ -31,6 +31,7 @@ class PaperLib {
         specularStrength: Float, specularRoughness: Float,
         fiberStrength: Float, grainScale: Float, thickness: Float
     ): Unit
+    external fun paperSetSize(sizeId: String): Unit
     external fun paperResize(width: Int, height: Int): Unit
     external fun paperRenderFrame(): Unit
     external fun paperGetInfo(): String

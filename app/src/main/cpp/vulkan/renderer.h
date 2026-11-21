@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.h>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "material/material.h"
@@ -54,6 +55,10 @@ public:
     // Set paper material
     void setMaterial(const PaperMaterialParams& material);
 
+    // Set paper size by stable id (see kPaperSizes table in renderer.cpp).
+    // Passes the size id string, not an ordinal, so it is stable across enum reordering.
+    void setPaperSize(const char* sizeId);
+
     // Render one frame
     void renderFrame();
 
@@ -79,6 +84,12 @@ private:
     QualityLevel quality_ = QualityLevel::Balanced;
     LightParams light_;
     PaperMaterialParams material_;
+
+    // Selected paper size (stable id) and its aspect ratio (width/height).
+    std::string paperSizeId_;
+    float paperAspect_ = 1.0f;
+    int surfaceWidth_ = 0;
+    int surfaceHeight_ = 0;
 
     bool initialized_ = false;
 };
