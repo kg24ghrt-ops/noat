@@ -127,6 +127,18 @@ Java_com_example_noat_PaperLib_paperSetMaterial(JNIEnv* env, jobject /* thiz */,
 }
 
 JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperSetSize(JNIEnv* env, jobject /* thiz */, jstring size_id) {
+    (void)env;
+    std::lock_guard<std::mutex> lock(g_renderer_mutex);
+    if (!g_renderer) return;
+
+    const char* sizeId = env->GetStringUTFChars(size_id, nullptr);
+    if (sizeId == nullptr) return;
+    g_renderer->setPaperSize(sizeId);
+    env->ReleaseStringUTFChars(size_id, sizeId);
+}
+
+JNIEXPORT void JNICALL
 Java_com_example_noat_PaperLib_paperResize(JNIEnv* env, jobject /* thiz */,
                                             jint width, jint height) {
     (void)env;

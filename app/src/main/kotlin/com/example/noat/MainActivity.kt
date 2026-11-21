@@ -12,6 +12,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.example.noat.R
 import android.widget.TextView
+import android.widget.Button
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 
 class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
@@ -19,6 +20,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
     private lateinit var vulkanSurface: SurfaceView
     private val paperLib = PaperLib()
     private var currentPaperIndex = 0
+    private var currentSizeIndex = 0
     private var isRendering = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,6 +66,16 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
             )
             textView.text = "${getString(R.string.app_name)} — ${type.name}"
         }
+
+        // Size button: cycle through paper sizes (next to the FAB).
+        val sizeButton = findViewById<Button>(R.id.size_button)
+        sizeButton.text = PaperSizes[currentSizeIndex].name
+        sizeButton.setOnClickListener {
+            currentSizeIndex = (currentSizeIndex + 1) % PaperSizes.size
+            val size = PaperSizes[currentSizeIndex]
+            sizeButton.text = size.name
+            paperLib.paperSetSize(size.id)
+        }
     }
 
     // SurfaceHolder.Callback
@@ -72,6 +84,8 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         val surface = holder.surface
         if (surface.isValid) {
             paperLib.paperInitWithSurface(surface)
+            // Default to A4 on the live renderer (C++ also defaults to A4).
+            paperLib.paperSetSize(DefaultPaperSizeId)
         }
         startRenderLoop()
     }
@@ -134,4 +148,38 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         RoughTextured,
         Parchment;
     }
+}
+
+/**
+ * Paper size table — one source of truth for dimensions and labels.
+ * Dimensions in mm, portrait orientation.
+ *
+ * These ids MUST match the C++ kPaperSizes table in renderer.cpp exactly.
+ * The id (not an ordinal) is passed over JNI to the native renderer so it
+ * stays stable across enum reordering.
+ */
+val PaperSizes = listOf(
+    PaperSize("A3",   "A3",   297f, 420f),
+    PaperSize("A4",   "A4",   210f, 297f),
+    PaperSize("A5",   "A5",   148f, 210f),
+    PaperSize("A6",   "A6",   105f, 148f),
+    PaperSize("LETTER", "Letter", 216f, 279f),
+    PaperSize("LEGAL",  "Legal",  216f, 356f),
+)
+
+/** Default paper size id. Matches kDefaultPaperSizeId in renderer.cpp. */
+val DefaultPaperSizeId = "A4"
+
+/**
+ * A selectable paper size.
+ * aspectRatio = widthMm / heightMm (all A-series share 1:sqrt(2)).
+ */
+data class PaperSize(
+    val id: String,          // stable id, passed over JNI
+    val name: String,        // label shown on the size button
+    val widthMm: Float,
+    val heightMm: Float
+) {
+    val aspectRatio: Float
+        get() = widthMm / heightMm
 }
