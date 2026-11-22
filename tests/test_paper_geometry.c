@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "paper_geometry.h"
+#include "noat_paper_geometry.h"
 
 /* ------------------------------------------------------------------ */
 /* Minimal test runner                                                */
