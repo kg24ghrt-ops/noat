@@ -6,10 +6,8 @@
 // Push constants sent to the vertex shader each frame. Layout must match the
 // `PushConstants` block in paper_quad.vert exactly (std140 scalar order).
 struct PushConstantBlock {
-    float paperWidthMm;    // physical paper width  (mm)
-    float paperHeightMm;   // physical paper height (mm)
-    float surfaceWidth;    // surface width  (pixels)
-    float surfaceHeight;   // surface height (pixels)
+    float qx;   /* normalised half-width  of the paper quad (NDC) */
+    float qy;   /* normalised half-height of the paper quad (NDC) */
 };
 
 // Graphics pipeline for the paper renderer.

@@ -18,37 +18,6 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
 
-namespace {
-// One source of truth for paper sizes. Dimensions in mm, portrait orientation.
-// These ids/dimensions MUST match the Kotlin PaperSize table in MainActivity.kt.
-struct PaperSize {
-    const char* id;          // stable id, passed over JNI (not an ordinal)
-    const char* name;        // human-readable label shown in the UI
-    float widthMm;
-    float heightMm;
-    float aspect() const { return widthMm / heightMm; }
-};
-
-constexpr PaperSize kPaperSizes[] = {
-    {"A3",   "A3",   297.0f, 420.0f},
-    {"A4",   "A4",   210.0f, 297.0f},
-    {"A5",   "A5",   148.0f, 210.0f},
-    {"A6",   "A6",   105.0f, 148.0f},
-    {"LETTER", "Letter", 216.0f, 279.0f},
-    {"LEGAL",  "Legal",  216.0f, 356.0f},
-};
-constexpr size_t kPaperSizeCount = sizeof(kPaperSizes) / sizeof(kPaperSizes[0]);
-
-const PaperSize* findPaperSize(const char* id) {
-    for (size_t i = 0; i < kPaperSizeCount; ++i) {
-        if (std::strcmp(kPaperSizes[i].id, id) == 0) {
-            return &kPaperSizes[i];
-        }
-    }
-    return nullptr;
-}
-} // namespace
-
 PaperRenderer::PaperRenderer() = default;
 
 PaperRenderer::~PaperRenderer() {
@@ -141,7 +110,11 @@ bool PaperRenderer::init(void* nativeWindow) {
     material_.thickness = 0.08f;
 
     initialized_ = true;
-    LOGI("Paper renderer initialized successfully");
+
+    // Default to A4 via the C geometry module.
+    current_size_ = paper_geometry_default_size();
+    LOGI("Paper renderer initialized successfully, default size=%s (%.0fx%.0f mm)",
+         current_size_->name, current_size_->width_mm, current_size_->height_mm);
     return true;
 }
 
@@ -189,17 +162,16 @@ void PaperRenderer::setMaterial(const PaperMaterialParams& material) {
 }
 
 void PaperRenderer::setPaperSize(const char* sizeId) {
-    const PaperSize* size = findPaperSize(sizeId);
+    const PaperSize* size = paper_geometry_find_size(sizeId);
     if (size == nullptr) {
-        LOGE("Unknown paper size id: %s, keeping %s", sizeId, paperSizeId_.c_str());
+        LOGE("Unknown paper size id: %s, keeping %s", sizeId,
+             current_size_ ? current_size_->id : "(none)");
         return;
     }
-    paperSizeId_ = sizeId;
-    paperWidthMm_ = size->widthMm;
-    paperHeightMm_ = size->heightMm;
-    paperAspect_ = size->aspect();
+    current_size_ = size;
     LOGI("Paper size set to %s (%s), %.0fx%.0f mm, aspect=%.4f", sizeId, size->name,
-         size->widthMm, size->heightMm, paperAspect_);
+         size->width_mm, size->height_mm,
+         size->width_mm / size->height_mm);
 }
 
 void PaperRenderer::renderFrame() {
@@ -318,17 +290,28 @@ void PaperRenderer::renderFrame() {
     scissor.extent = renderPassInfo.renderArea.extent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    // Push constants: paper physical dims + surface dims (pixels).
+    // Push constants: pre-computed quad half-width/half-height in NDC,
+    // computed in C from physical mm dims + surface pixel dims.
     PushConstantBlock pc{};
-    pc.paperWidthMm = paperWidthMm_;
-    pc.paperHeightMm = paperHeightMm_;
-    pc.surfaceWidth = static_cast<float>(context_->width());
-    pc.surfaceHeight = static_cast<float>(context_->height());
+    if (current_size_ != NULL) {
+        PaperQuad quad{};
+        paper_geometry_compute_quad(current_size_,
+                                    static_cast<float>(context_->width()),
+                                    static_cast<float>(context_->height()),
+                                    &quad);
+        pc.qx = quad.qx;
+        pc.qy = quad.qy;
+    }
     vkCmdPushConstants(cmd, pipeline_->pipelineLayout(),
                        VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBlock), &pc);
 
-    LOGI("renderFrame #%u: paper %.0fx%.0f mm (aspect=%.4f), surface %dx%d px",
-         currentFrame_, paperWidthMm_, paperHeightMm_, paperAspect_,
+    LOGI("renderFrame #%u: paper %s (%.0fx%.0f mm, aspect=%.4f), quad qx=%.4f qy=%.4f, surface %dx%d px",
+         currentFrame_,
+         current_size_ ? current_size_->name : "(none)",
+         current_size_ ? current_size_->width_mm : 0.0f,
+         current_size_ ? current_size_->height_mm : 0.0f,
+         current_size_ ? (current_size_->width_mm / current_size_->height_mm) : 0.0f,
+         pc.qx, pc.qy,
          context_->width(), context_->height());
 
     // Bind descriptor sets
