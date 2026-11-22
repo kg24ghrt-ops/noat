@@ -1,5 +1,6 @@
 #include "paper_geometry.h"
 
+#include <math.h>
 #include <string.h>
 
 /*
@@ -42,6 +43,11 @@ void paper_geometry_compute_quad(const PaperSize *size,
                                  float surface_width_px,
                                  float surface_height_px,
                                  PaperQuad *result) {
+    /* Guard against NULL result pointer so callers can safely probe. */
+    if (result == NULL) {
+        return;
+    }
+
     /* Zero-initialise output so callers always get defined values. */
     result->qx = 0.0f;
     result->qy = 0.0f;
@@ -49,7 +55,8 @@ void paper_geometry_compute_quad(const PaperSize *size,
     if (size == NULL) {
         return;
     }
-    if (surface_width_px <= 0.0f || surface_height_px <= 0.0f) {
+    if (surface_width_px <= 0.0f || surface_height_px <= 0.0f ||
+        isnan(surface_width_px) || isnan(surface_height_px)) {
         return;
     }
 
