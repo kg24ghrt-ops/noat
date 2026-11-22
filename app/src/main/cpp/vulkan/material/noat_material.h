@@ -1,7 +1,3 @@
-/*
- * noat_material.h - Material parameters for paper rendering
- */
-
 #ifndef NOAT_MATERIAL_H
 #define NOAT_MATERIAL_H
 

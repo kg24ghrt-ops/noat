@@ -1,11 +1,7 @@
-/*
- * noat_material.c - Material parameters for paper rendering
- */
-
 #include "noat_material.h"
+
 #include <string.h>
 
-/* Default material: standard notebook paper */
 const NoatMaterialParams noat_material_default = {
     .color = {0.92f, 0.94f, 0.98f},
     .roughness = 0.4f,
