@@ -1,6 +1,8 @@
 #ifndef PAPER_GEOMETRY_H
 #define PAPER_GEOMETRY_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -33,7 +35,7 @@ typedef struct {
 extern const size_t kPaperSizeCount;
 
 /* The paper size table itself. Defined in paper_geometry.c. */
-extern const PaperSize kPaperSizes[];
+extern const PaperSize *kPaperSizes;
 
 /* Return the default size (A4). */
 const PaperSize *paper_geometry_default_size(void);
