@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "material/material.h"
+#include "paper_geometry.h"
 
 class VulkanContext;
 class VulkanRenderPass;
@@ -85,11 +86,8 @@ private:
     LightParams light_;
     PaperMaterialParams material_;
 
-    // Selected paper size (stable id) and its aspect ratio (width/height).
-    std::string paperSizeId_;
-    float paperAspect_ = 1.0f;
-    float paperWidthMm_ = 210.0f;   // A4 width  (mm)
-    float paperHeightMm_ = 297.0f;  // A4 height (mm)
+    // Selected paper size (stable id). Pointer into kPaperSizes table.
+    const PaperSize *current_size_ = NULL;
 
     bool initialized_ = false;
 };

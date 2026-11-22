@@ -8,6 +8,7 @@ set(VULKAN_ENGINE_SRC
     resources.cpp
     frame.cpp
     renderer.cpp
+    paper_geometry.c
     material/material.cpp
     jni/vulkan_jni.cpp
 )
