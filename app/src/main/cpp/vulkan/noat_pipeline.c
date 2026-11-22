@@ -1,0 +1,251 @@
+/*
+ * noat_pipeline.c - Vulkan graphics pipeline for paper rendering
+ */
+
+#include "noat_vulkan.h"
+#include "noat_pipeline.h"
+#include "noat_paper_geometry.h"
+
+#include <android/log.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define TAG "NoatPipeline"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+
+/* Embedded SPIR-V shaders - compiled from GLSL with glslangValidator */
+static const uint32_t kVertSpirv[] = {
+    0x07230203u, 0x00010000u, 0x0008000Bu, 0x00000063u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000Bu,
+    0x00000001u, 0x4C534C47u, 0x6474732Eu, 0x3035342Eu, 0x00000000u, 0x0003000Eu, 0x00000000u, 0x00000001u,
+    0x0007000Fu, 0x00000000u, 0x00000004u, 0x6E69616Du, 0x00000000u, 0x00000026u, 0x00030003u, 0x00000002u,
+    0x000001C2u, 0x00090004u, 0x415F4C47u, 0x735F4252u, 0x72617065u, 0x5F657461u, 0x64616873u, 0x6F5F7265u,
+    0x63656A62u, 0x00007374u, 0x00040005u, 0x00000004u, 0x6E69616Du, 0x00000000u, 0x00060005u, 0x00000008u,
+    0x565F6C67u, 0x65747265u, 0x646E4978u, 0x00007865u, 0x00030005u, 0x00000012u, 0x00000070u, 0x00060005u,
+    0x00000024u, 0x505F6C67u, 0x65567265u, 0x78657472u, 0x00000000u, 0x00060006u, 0x00000024u, 0x00000000u,
+    0x505F6C67u, 0x7469736Fu, 0x006E6F69u, 0x00070006u, 0x00000024u, 0x00000001u, 0x505F6C67u, 0x746E696Fu,
+    0x657A6953u, 0x00000000u, 0x00070006u, 0x00000024u, 0x00000002u, 0x435F6C67u, 0x4470696Cu, 0x61747369u,
+    0x0065636Eu, 0x00070006u, 0x00000024u, 0x00000003u, 0x435F6C67u, 0x446C6C75u, 0x61747369u, 0x0065636Eu,
+    0x00020013u, 0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00040015u, 0x00000006u, 0x00000020u,
+    0x00000001u, 0x00040020u, 0x00000007u, 0x00000001u, 0x00000006u, 0x0004003Bu, 0x00000007u, 0x00000008u,
+    0x00000001u, 0x0004002Bu, 0x00000006u, 0x0000000Au, 0x00000000u, 0x00020014u, 0x0000000Bu, 0x00030016u,
+    0x0000000Fu, 0x00000020u, 0x00040017u, 0x00000010u, 0x0000000Fu, 0x00000002u, 0x00040020u, 0x00000011u,
+    0x00000007u, 0x00000010u, 0x0004002Bu, 0x0000000Fu, 0x00000013u, 0x00000001u, 0x0004002Bu, 0x0000000Fu,
+    0x0000001Bu, 0x3F800000u, 0x0005002Cu, 0x00000010u, 0x00000014u, 0x00000013u, 0x00000013u, 0x0004002Bu,
+    0x00000006u, 0x00000017u, 0x00000001u, 0x0004002Bu, 0x0000000Fu, 0x0000001Bu, 0x3F800000u, 0x0005002Cu,
+    0x00000010u, 0x0000001Cu, 0x0000001Bu, 0x00000013u, 0x0004002Bu, 0x00000006u, 0x00000017u, 0x00000001u,
+    0x0004002Bu, 0x0000000Fu, 0x0000001Bu, 0x3F800000u, 0x0005002Cu, 0x00000010u, 0x0000001Cu, 0x0000001Bu,
+    0x00000013u, 0x0004002Bu, 0x0000000Fu, 0x0000001Eu, 0x00000000u, 0x0005002Cu, 0x00000010u, 0x0000001Fu,
+    0x0000001Eu, 0x00000013u, 0x00040017u, 0x00000020u, 0x0000000Fu, 0x00000004u, 0x00040015u, 0x00000021u,
+    0x00000020u, 0x00000000u, 0x0004002Bu, 0x00000021u, 0x00000022u, 0x00000001u, 0x0004001Cu, 0x00000023u,
+    0x0000000Fu, 0x00000022u, 0x0006001Eu, 0x00000024u, 0x00000020u, 0x0000000Fu, 0x00000023u, 0x00000023u,
+    0x00040020u, 0x00000025u, 0x00000003u, 0x00000024u, 0x0004003Bu, 0x00000025u, 0x00000026u, 0x00000003u,
+    0x00040020u, 0x0000002Bu, 0x00000003u, 0x00000024u, 0x00050036u, 0x00000002u, 0x00000004u, 0x00000000u,
+    0x00000003u, 0x000200F8u, 0x00000005u, 0x0004003Bu, 0x00000011u, 0x00000012u, 0x00000007u, 0x0004003Du,
+    0x00000006u, 0x00000009u, 0x00000008u, 0x000500AAu, 0x0000000Bu, 0x0000000Cu, 0x00000009u, 0x0000000Au,
+    0x000300F7u, 0x0000000Eu, 0x00000000u, 0x000400FAu, 0x0000000Cu, 0x0000000Du, 0x00000015u, 0x000200F8u,
+    0x0000000Du, 0x0003003Eu, 0x00000012u, 0x00000014u, 0x000200F9u, 0x0000000Eu, 0x000200F8u, 0x00000015u,
+    0x0004003Du, 0x00000006u, 0x00000016u, 0x00000008u, 0x000500AAu, 0x0000000Bu, 0x0000000Cu, 0x00000009u,
+    0x0000000Au, 0x000300F7u, 0x0000001Au, 0x00000000u, 0x000400FAu, 0x00000018u, 0x00000019u, 0x0000001Du,
+    0x000200F8u, 0x00000019u, 0x0003003Eu, 0x00000012u, 0x0000001Cu, 0x000200F9u, 0x0000001Au, 0x000200F8u,
+    0x0000001Au, 0x0004003Du, 0x00000010u, 0x00000027u, 0x00000012u, 0x00050051u, 0x0000000Fu, 0x00000028u,
+    0x00000027u, 0x00000000u, 0x00050051u, 0x0000000Fu, 0x00000029u, 0x00000027u, 0x00000001u, 0x00070050u,
+    0x00000020u, 0x0000002Au, 0x00000028u, 0x0000001Eu, 0x0000001Bu, 0x00050041u, 0x0000002Bu, 0x0000002Cu,
+    0x00000026u, 0x0000000Au, 0x0003003Eu, 0x0000002Cu, 0x0000002Au, 0x000100FDu, 0x00010038u,
+};
+
+static const uint32_t kFragSpirv[] = {
+    0x07230203u, 0x00010000u, 0x0008000Bu, 0x0000000Eu, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000Bu,
+    0x00000001u, 0x4C534C47u, 0x6474732Eu, 0x3035342Eu, 0x00000000u, 0x0003000Eu, 0x00000000u, 0x00000001u,
+    0x0006000Fu, 0x00000004u, 0x00000004u, 0x6E69616Du, 0x00000000u, 0x00000009u, 0x00030010u, 0x00000004u,
+    0x00000007u, 0x00030003u, 0x00000002u, 0x000001C2u, 0x00090004u, 0x415F4C47u, 0x735F4252u, 0x72617065u,
+    0x5F657461u, 0x64616873u, 0x6F5F7265u, 0x63656A62u, 0x00007374u, 0x00040005u, 0x00000004u, 0x6E69616Du,
+    0x00000000u, 0x00040005u, 0x00000009u, 0x6C6F436Fu, 0x6F6C6F43u, 0x00000072u, 0x00020014u, 0x00000001u,
+    0x00030015u, 0x00000002u, 0x00000020u, 0x00040017u, 0x00000003u, 0x00000002u, 0x00000004u, 0x00020016u,
+    0x00000004u, 0x00040019u, 0x00000008u, 0x00000003u, 0x00000001u, 0x0004002Bu, 0x00000006u, 0x0000000Au,
+    0x3F6B851Fu, 0x0004002Bu, 0x00000006u, 0x0000000Bu, 0x3F70A3D7u, 0x0007002Cu, 0x00000007u, 0x0000000Du,
+    0x0000000Au, 0x0000000Bu, 0x0000000Cu, 0x0000000Du, 0x00050036u, 0x00000002u, 0x00000004u, 0x00000000u,
+    0x00000003u, 0x000200F8u, 0x00000005u, 0x0003003Eu, 0x00000009u, 0x0000000Eu, 0x000100FDu, 0x00010038u,
+};
+
+NoatPipeline *noat_pipeline_create(VkDevice device, VkRenderPass render_pass,
+                                    VkExtent2D extent, VkDescriptorSetLayout desc_layout) {
+    NoatPipeline *pl = calloc(1, sizeof(NoatPipeline));
+    if (!pl) return NULL;
+
+    pl->device = device;
+
+    VkPushConstantRange push_range = {
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .offset = 0,
+        .size = sizeof(float) * 2,
+    };
+
+    VkPipelineLayoutCreateInfo layout_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &desc_layout,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &push_range,
+    };
+
+    if (vkCreatePipelineLayout(device, &push_range, NULL, &pl->pipeline_layout) != VK_SUCCESS) {
+        LOGE("Failed to create pipeline layout");
+        free(pl);
+        return NULL;
+    }
+    pl->pipeline_layout = pl->pipeline_layout;
+
+    VkShaderModule vert_module = vkCreateShaderModule(device, &(VkShaderModuleCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(kVertSpirv),
+        .pCode = kVertSpirv,
+    }, NULL);
+    VkShaderModule frag_module = vkCreateShaderModule(device, &(VkShaderModuleCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(kFragSpirv),
+        .pCode = kFragSpirv,
+    }, NULL);
+
+    if (!vert_module || !frag_module) {
+        LOGE("Failed to create shader modules");
+        if (vert_module) vkDestroyShaderModule(device, vert_module, NULL);
+        if (frag_module) vkDestroyShaderModule(device, frag_module, NULL);
+        free(pl);
+        return NULL;
+    }
+
+    VkPipelineShaderStageCreateInfo vert_stage = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_VERTEX_BIT,
+        .module = vert_module,
+        .pName = "main",
+    };
+    VkPipelineShaderStageCreateInfo frag_stage = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .module = frag_module,
+        .pName = "main",
+    };
+    VkPipelineShaderStageCreateInfo stages[2] = {vert_stage, frag_stage};
+
+    VkPipelineVertexInputStateCreateInfo vertex_input = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount = 0,
+        .vertexAttributeDescriptionCount = 0,
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo input_assembly = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .primitiveRestartEnable = VK_FALSE,
+    };
+
+    VkPipelineViewportStateCreateInfo viewport_state = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,
+        .scissorCount = 1,
+    };
+
+    VkPipelineRasterizationStateCreateInfo rasterizer = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .depthClampEnable = VK_FALSE,
+        .rasterizerDiscardEnable = VK_FALSE,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .lineWidth = 1.0f,
+        .cullMode = VK_CULL_MODE_NONE,
+        .frontFace = VK_FRONT_FACE_CLOCKWISE,
+        .depthBiasEnable = VK_FALSE,
+    };
+
+    VkPipelineMultisampleStateCreateInfo multisampling = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .sampleShadingEnable = VK_FALSE,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+    };
+
+    VkPipelineDepthStencilStateCreateInfo depth_stencil = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_FALSE,
+        .depthWriteEnable = VK_FALSE,
+    };
+
+    VkPipelineColorBlendAttachmentState color_blend_attachment = {
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+        .blendEnable = VK_FALSE,
+    };
+    VkPipelineColorBlendStateCreateInfo color_blending = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .logicOpEnable = VK_FALSE,
+        .logicOp = VK_LOGIC_OP_COPY,
+        .attachmentCount = 1,
+        .pAttachments = &color_blend_attachment,
+    };
+
+    VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamic_state = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = 2,
+        .pDynamicStates = dynamic_states,
+    };
+
+    VkGraphicsPipelineCreateInfo pipeline_info = {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = 2,
+        .pStages = stages,
+        .pVertexInputState = &vertex_input,
+        .pInputAssemblyState = &input_assembly,
+        .pViewportState = &viewport_state,
+        .pRasterizationState = &rasterizer,
+        .pMultisampleState = &multisampling,
+        .pDepthStencilState = &(VkPipelineDepthStencilStateCreateInfo){
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            .depthTestEnable = VK_FALSE,
+            .depthWriteEnable = VK_FALSE,
+        },
+        .pColorBlendState = &(VkPipelineColorBlendStateCreateInfo){
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            .logicOpEnable = VK_FALSE,
+            .logicOp = VK_LOGIC_OP_COPY,
+            .attachmentCount = 1,
+            .pAttachments = &(VkPipelineColorBlendAttachmentState){
+                .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                  VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+                .blendEnable = VK_FALSE,
+            },
+        },
+        .pDynamicState = &(VkPipelineDynamicStateCreateInfo){
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .dynamicStateCount = 2,
+            .pDynamicStates = dynamic_states,
+        },
+        .layout = pl->pipeline_layout,
+        .renderPass = render_pass,
+        .subpass = 0,
+    };
+
+    VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &pl->pipeline);
+    vkDestroyShaderModule(device, vert_module, NULL);
+    vkDestroyShaderModule(device, frag_module, NULL);
+
+    if (result != VK_SUCCESS) {
+        LOGE("Failed to create graphics pipeline: %d", result);
+        vkDestroyPipelineLayout(device, pl->pipeline_layout, NULL);
+        free(pl);
+        return NULL;
+    }
+
+    LOGI("Vulkan pipeline created");
+    return pl;
+}
+
+void noat_pipeline_destroy(NoatPipeline *pl) {
+    if (!pl) return;
+    if (pl->pipeline) vkDestroyPipeline(pl->device, pl->pipeline, NULL);
+    if (pl->pipeline_layout) vkDestroyPipelineLayout(pl->device, pl->pipeline_layout, NULL);
+    free(pl);
+}
+
+VkPipeline noat_pipeline_get_handle(const NoatPipeline *pl) { return pl ? pl->pipeline : VK_NULL_HANDLE; }
+VkPipelineLayout noat_pipeline_get_layout(const NoatPipeline *pl) { return pl ? pl->pipeline_layout : VK_NULL_HANDLE; }

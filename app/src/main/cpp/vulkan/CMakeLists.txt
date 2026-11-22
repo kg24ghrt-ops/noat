@@ -2,25 +2,27 @@
 # Targets ARM Mali GPUs with tile-based rendering optimizations via subpasses
 
 set(VULKAN_ENGINE_SRC
-    context.cpp
-    renderpass.cpp
-    pipeline.cpp
-    resources.cpp
-    frame.cpp
-    renderer.cpp
-    paper_geometry.c
-    material/material.cpp
-    jni/vulkan_jni.cpp
+    noat_context.c
+    noat_renderpass.c
+    noat_pipeline.c
+    noat_resources.c
+    noat_frame.c
+    noat_renderer.c
+    noat_paper_geometry.c
+    noat_material.c
+    jni/noat_jni.c
 )
 
 set(VULKAN_ENGINE_HDR
-    context.h
-    renderpass.h
-    pipeline.h
-    resources.h
-    frame.h
-    renderer.h
-    material/material.h
+    noat_vulkan.h
+    noat_context.h
+    noat_renderpass.h
+    noat_pipeline.h
+    noat_resources.h
+    noat_frame.h
+    noat_renderer.h
+    noat_paper_geometry.h
+    noat_material.h
 )
 
 add_library(
@@ -36,9 +38,11 @@ target_include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_compile_features(
-    paper-engine
-    PRIVATE cxx_std_17
+# Compile as C11 standard
+set_target_properties(paper-engine PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED ON
+    C_EXTENSIONS OFF
 )
 
 find_library(VULKAN_LIB vulkan REQUIRED)
@@ -62,5 +66,14 @@ target_compile_options(
     -Wextra
     -fvisibility=hidden
     -ffast-math
-    -fno-rtti
+)
+
+# C-specific flags
+target_compile_options(paper-engine PRIVATE
+    -std=c11
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Wno-unused-parameter
+    -fvisibility=hidden
 )
