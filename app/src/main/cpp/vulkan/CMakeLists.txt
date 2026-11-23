@@ -9,7 +9,7 @@ set(VULKAN_ENGINE_SRC
     noat_frame.c
     noat_renderer.c
     noat_paper_geometry.c
-    noat_material.c
+    material/noat_material.c
     jni/noat_jni.c
 )
 
