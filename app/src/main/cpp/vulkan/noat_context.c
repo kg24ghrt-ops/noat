@@ -25,39 +25,6 @@ static const char *kInstanceExtensions[] = {
 };
 #define INSTANCE_EXT_COUNT 2
 
-static const char *kDeviceExtensions[] = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-};
-#define DEVICE_EXT_COUNT 1
-
-static const char *kValidationLayers[] = {
-    "VK_LAYER_KHRONOS_validation",
-};
-#define VALIDATION_LAYER_COUNT 1
-
-static VkBool32 debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-                               VkDebugUtilsMessageTypeFlagsEXT type,
-                               const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
-                               void *user_data) {
-    if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-        LOGE("Vulkan Validation: %s", callback_data->pMessage);
-    } else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-        LOGW("Vulkan Validation: %s", callback_data->pMessage);
-    } else {
-        LOGI("Vulkan Validation: %s", callback_data->pMessage);
-    }
-    return VK_FALSE;
-}
-
-static int check_extension_support(const char *req, VkExtensionProperties *avail, uint32_t count) {
-    for (uint32_t i = 0; i < count; i++) {
-        if (strcmp(req, avail[i].extensionName) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
 static int create_instance(NoatContext *ctx, int enable_validation) {
     uint32_t ext_count = 0;
     vkEnumerateInstanceExtensionProperties(NULL, &ext_count, NULL);
@@ -214,9 +181,6 @@ static int create_logical_device(NoatContext *ctx) {
         .pQueuePriorities = (float[]){1.0f},
     };
 
-    VkPhysicalDeviceFeatures features = {0};
-
-    const char *exts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     VkDeviceCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pQueueCreateInfos = &queue_info,
@@ -264,10 +228,8 @@ static int create_swapchain(NoatContext *ctx) {
     vkGetPhysicalDeviceSurfacePresentModesKHR(ctx->physical_device, ctx->surface, &present_mode_count, NULL);
     VkPresentModeKHR *present_modes = malloc(present_mode_count * sizeof(VkPresentModeKHR));
     vkGetPhysicalDeviceSurfacePresentModesKHR(ctx->physical_device, ctx->surface, &present_mode_count, present_modes);
-    VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
     free(present_modes);
 
-    VkExtent2D extent;
     if (caps.currentExtent.width != UINT32_MAX) {
         ctx->extent = caps.currentExtent;
     } else {
