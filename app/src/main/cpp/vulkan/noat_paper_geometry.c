@@ -56,7 +56,8 @@ void paper_geometry_compute_quad(const PaperSize *size,
         return;
     }
     if (surface_width_px <= 0.0f || surface_height_px <= 0.0f ||
-        isnan(surface_width_px) || isnan(surface_height_px)) {
+        isnan(surface_width_px) || isnan(surface_height_px) ||
+        isinf(surface_width_px) || isinf(surface_height_px)) {
         return;
     }
 

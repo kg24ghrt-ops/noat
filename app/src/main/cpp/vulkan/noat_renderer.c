@@ -242,8 +242,8 @@ void noat_renderer_render_frame(NoatRenderer *r) {
 
     VkViewport viewport = {
         .x = 0, .y = 0,
-        .width = (float)r->context->width(),
-        .height = (float)r->context->height(),
+        .width = (float)r->context->width,
+        .height = (float)r->context->height,
         .minDepth = 0.0f, .maxDepth = 1.0f,
     };
     vkCmdSetViewport(cmd, 0, 1, &viewport);

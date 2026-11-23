@@ -149,9 +149,11 @@ jobs:
 
       - name: Compile and run C unit tests
         run: |
-          clang -Wall -Wextra -std=c11 \
+          clang -Wall -Wextra -Wpedantic -std=c11 \
             -I app/src/main/cpp/vulkan \
-            app/src/main/cpp/vulkan/paper_geometry.c \
+            app/src/main/cpp/vulkan/noat_paper_geometry.c \
             tests/test_paper_geometry.c \
             -o test_paper_geometry -lm
+          echo "=== Running C unit tests ==="
           ./test_paper_geometry
+          echo "=== C unit tests complete ==="

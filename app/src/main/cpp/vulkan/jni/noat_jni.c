@@ -172,7 +172,7 @@ Java_com_example_noat_PaperLib_paperRenderFrame(JNIEnv *env, jobject thiz) {
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_noat_PaperLib_paperShutdown(JNIEnv *env, jobject thiz) {
+Java_com_example_noat_PaperLib_paperShutdown(JNIEnv* env, jobject /* thiz */) {
     (void)env;
     (void)thiz;
 
@@ -181,5 +181,28 @@ Java_com_example_noat_PaperLib_paperShutdown(JNIEnv *env, jobject thiz) {
         noat_renderer_destroy(g_renderer);
         g_renderer = NULL;
     }
+    pthread_mutex_unlock(&g_renderer_mutex);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_example_noat_PaperLib_paperGetInfo(JNIEnv* env, jobject /* thiz */) {
+    (void)env;
+    (void)thiz;
+
+    pthread_mutex_lock(&g_renderer_mutex);
+    if (!g_renderer) {
+        pthread_mutex_unlock(&g_renderer_mutex);
+        return (*env)->NewStringUTF(env, "Paper engine not initialized");
+    }
+
+    const NoatPaperSize *size = g_renderer->current_size;
+    char info[128];
+    snprintf(info, sizeof(info), "Paper engine: %s (%.0fx%.0f mm)",
+             size ? size->name : "unknown",
+             size ? size->width_mm : 0.0f,
+             size ? size->height_mm : 0.0f);
+    pthread_mutex_unlock(&g_renderer_mutex);
+    return (*env)->NewStringUTF(env, info);
+}
     pthread_mutex_unlock(&g_renderer_mutex);
 }

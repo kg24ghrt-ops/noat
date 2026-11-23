@@ -45,14 +45,11 @@ struct NoatContext {
     VkSurfaceFormatKHR surface_format;
     VkExtent2D extent;
     VkSwapchainKHR swapchain;
-    VkFormat swapchain_format;
     VkImageView *image_views;
     VkImage *images;
     uint32_t image_count;
     int width;
     int height;
-    VkSurfaceFormatKHR surface_format_khr;
-    VkSwapchainKHR swapchain;
     int initialized;
     int validation_layers_active;
 };
