@@ -89,23 +89,24 @@ NoatPipeline *noat_pipeline_create(VkDevice device, VkRenderPass render_pass,
         .pPushConstantRanges = &push_range,
     };
 
-    if (vkCreatePipelineLayout(device, &push_range, NULL, &pl->pipeline_layout) != VK_SUCCESS) {
+    if (vkCreatePipelineLayout(device, &layout_info, NULL, &pl->pipeline_layout) != VK_SUCCESS) {
         LOGE("Failed to create pipeline layout");
         free(pl);
         return NULL;
     }
-    pl->pipeline_layout = pl->pipeline_layout;
 
-    VkShaderModule vert_module = vkCreateShaderModule(device, &(VkShaderModuleCreateInfo){
+    VkShaderModule vert_module;
+    vkCreateShaderModule(device, &(VkShaderModuleCreateInfo){
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize = sizeof(kVertSpirv),
         .pCode = kVertSpirv,
-    }, NULL);
-    VkShaderModule frag_module = vkCreateShaderModule(device, &(VkShaderModuleCreateInfo){
+    }, NULL, &vert_module);
+    VkShaderModule frag_module;
+    vkCreateShaderModule(device, &(VkShaderModuleCreateInfo){
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize = sizeof(kFragSpirv),
         .pCode = kFragSpirv,
-    }, NULL);
+    }, NULL, &frag_module);
 
     if (!vert_module || !frag_module) {
         LOGE("Failed to create shader modules");

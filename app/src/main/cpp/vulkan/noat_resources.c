@@ -4,28 +4,12 @@
 
 #include "noat_vulkan.h"
 #include <android/log.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define TAG "NoatResources"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
-
-struct NoatResources {
-    VkDevice device;
-    VkPhysicalDevice physical_device;
-    VkCommandPool command_pool;
-    VkQueue queue;
-    uint32_t swapchain_image_count;
-
-    VkDescriptorSetLayout descriptor_set_layout;
-    VkDescriptorPool descriptor_pool;
-    VkDescriptorSet *descriptor_sets;
-
-    VkBuffer *uniform_buffers;
-    VkDeviceMemory *uniform_buffer_memories;
-    VkDeviceSize uniform_buffer_size;
-    uint32_t swapchain_image_count;
-};
 
 NoatResources *noat_resources_create(VkDevice device, VkPhysicalDevice physical_device,
                                       VkCommandPool command_pool, VkQueue queue,
@@ -86,10 +70,10 @@ int noat_resources_create_descriptor_set_layout(NoatResources *res) {
     VkDescriptorSetLayoutCreateInfo layout_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .bindingCount = 2,
-        .pBindings = (VkDescriptorSetLayoutBinding[]){ubb, sampler_binding},
+        .pBindings = bindings,
     };
 
-    if (vkCreateDescriptorSetLayout(device, &layout_info, NULL, &res->descriptor_set_layout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(res->device, &layout_info, NULL, &res->descriptor_set_layout) != VK_SUCCESS) {
         LOGE("Failed to create descriptor set layout");
         return 0;
     }
@@ -155,7 +139,7 @@ int noat_resources_create_uniform_buffers(NoatResources *res, VkDeviceSize buffe
             .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         }, NULL, &res->uniform_buffers[i]) != VK_SUCCESS) {
-            LOGE("Failed to create uniform buffer %zu", i);
+            LOGE("Failed to create uniform buffer %u", i);
             return 0;
         }
 
@@ -165,7 +149,7 @@ int noat_resources_create_uniform_buffers(NoatResources *res, VkDeviceSize buffe
         uint32_t mem_type = UINT32_MAX;
         for (uint32_t j = 0; j < 32; j++) {
             if ((mem_req.memoryTypeBits & (1u << j)) &&
-                (mem_properties.memoryTypes[j].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))) {
+                (mem_props.memoryTypes[j].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))) {
                 mem_type = j;
                 break;
             }
@@ -176,7 +160,7 @@ int noat_resources_create_uniform_buffers(NoatResources *res, VkDeviceSize buffe
             .allocationSize = mem_req.size,
             .memoryTypeIndex = mem_type,
         }, NULL, &res->uniform_buffer_memories[i]) != VK_SUCCESS) {
-            LOGE("Failed to allocate uniform buffer memory %zu", i);
+            LOGE("Failed to allocate uniform buffer memory %u", i);
             return 0;
         }
 
@@ -199,15 +183,4 @@ VkDescriptorSetLayout noat_resources_get_descriptor_set_layout(const NoatResourc
 const VkDescriptorSet *noat_resources_get_descriptor_sets(const NoatResources *res, uint32_t *count) {
     if (count) *count = res->swapchain_image_count;
     return res->descriptor_sets;
-}
-
-void noat_resources_update_uniform_buffer(NoatResources *res, uint32_t frame_index, const void *data, size_t size) {
-    void *mapped;
-    vkMapMemory(res->device, res->uniform_buffer_memories[frame_index], 0, size, 0, &mapped);
-    memcpy(mapped, data, size);
-    vkUnmapMemory(res->device, res->uniform_buffer_memories[frame_index]);
-}
-
-VkDescriptorSetLayout noat_resources_get_descriptor_set_layout(const NoatResources *res) {
-    return res->descriptor_set_layout;
 }

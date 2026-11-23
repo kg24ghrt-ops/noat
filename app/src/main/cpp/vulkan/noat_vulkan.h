@@ -1,6 +1,6 @@
 /*
  * noat_vulkan.h - Unified C Vulkan API for noat paper renderer
- * 
+ *
  * Opaque handle-based API for Vulkan paper renderer.
  * All objects are opaque pointers managed by create/destroy functions.
  */
@@ -9,6 +9,7 @@
 #define NOAT_VULKAN_H
 
 #include <vulkan/vulkan.h>
+#include <android/native_window.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -27,10 +28,9 @@ typedef struct NoatResources NoatResources;
 typedef struct NoatFrame NoatFrame;
 typedef struct NoatRenderer NoatRenderer;
 typedef struct NoatMaterial NoatMaterial;
-typedef struct NoatContext NoatContext;
 
 /* ========================================================================
- * Paper geometry types (from paper_geometry.h)
+ * Paper geometry types
  * ======================================================================== */
 
 typedef struct {
@@ -48,9 +48,9 @@ typedef struct {
 #define NOAT_PAPER_SCALE 0.85f
 
 /* Paper geometry functions */
-const struct NoatPaperSize *noat_paper_default_size(void);
-const struct NoatPaperSize *noat_paper_find_size(const char *id);
-void noat_paper_compute_quad(const struct NoatPaperSize *size,
+const NoatPaperSize *noat_paper_default_size(void);
+const NoatPaperSize *noat_paper_find_size(const char *id);
+void noat_paper_compute_quad(const NoatPaperSize *size,
                              float surface_width_px,
                              float surface_height_px,
                              float *qx, float *qy);
@@ -104,7 +104,7 @@ typedef enum {
 } NoatQualityLevel;
 
 /* ========================================================================
- * Context - Vulkan instance, device, swapchain, surface
+ * Context config
  * ======================================================================== */
 
 typedef struct NoatContextConfig {
@@ -114,6 +114,32 @@ typedef struct NoatContextConfig {
     int min_image_count;
     int enable_validation;
 } NoatContextConfig;
+
+/* ========================================================================
+ * Context
+ * ======================================================================== */
+
+struct NoatContext {
+    VkInstance instance;
+    VkSurfaceKHR surface;
+    VkPhysicalDevice physical_device;
+    VkDevice device;
+    VkQueue graphics_queue;
+    uint32_t graphics_queue_family;
+    VkSurfaceFormatKHR surface_format;
+    VkExtent2D extent;
+    VkSwapchainKHR swapchain;
+    VkImageView *image_views;
+    VkImage *images;
+    uint32_t image_count;
+    VkFormat swapchain_format;
+    int width;
+    int height;
+    int min_image_count;
+    int enable_validation;
+    int initialized;
+    int validation_layers_active;
+};
 
 NoatContext *noat_context_create(const NoatContextConfig *config);
 void noat_context_destroy(NoatContext *ctx);
@@ -131,17 +157,17 @@ int noat_context_get_height(const NoatContext *ctx);
 const VkSurfaceFormatKHR *noat_context_get_surface_format(const NoatContext *ctx);
 VkSurfaceKHR noat_context_get_surface(const NoatContext *ctx);
 VkInstance noat_context_get_instance(const NoatContext *ctx);
-int noat_context_get_image_count(const NoatContext *ctx);
-VkSurfaceFormatKHR noat_context_get_surface_format(const NoatContext *ctx);
-VkSwapchainKHR noat_context_get_swapchain(const NoatContext *ctx);
 uint32_t noat_context_get_image_count(const NoatContext *ctx);
-const VkImageView *noat_context_get_swapchain_image_views(const NoatContext *ctx, uint32_t *count);
-VkFormat noat_context_get_swapchain_format(const NoatContext *ctx);
-VkExtent2D noat_context_get_extent(const NoatContext *ctx);
+int noat_context_resize(NoatContext *ctx, int width, int height);
 
 /* ========================================================================
  * Render Pass
- * ========================================================================
+ * ======================================================================== */
+
+struct NoatRenderPass {
+    VkDevice device;
+    VkRenderPass render_pass;
+};
 
 NoatRenderPass *noat_renderpass_create(VkDevice device, VkFormat color_format);
 void noat_renderpass_destroy(NoatRenderPass *rp);
@@ -149,12 +175,18 @@ VkRenderPass noat_renderpass_get_handle(const NoatRenderPass *rp);
 
 /* ========================================================================
  * Pipeline
- * ========================================================================
+ * ======================================================================== */
 
 typedef struct {
     float qx;
     float qy;
 } NoatPushConstants;
+
+struct NoatPipeline {
+    VkDevice device;
+    VkPipelineLayout pipeline_layout;
+    VkPipeline pipeline;
+};
 
 NoatPipeline *noat_pipeline_create(VkDevice device, VkRenderPass render_pass,
                                     VkExtent2D extent, VkDescriptorSetLayout desc_layout);
@@ -162,15 +194,25 @@ void noat_pipeline_destroy(NoatPipeline *pl);
 VkPipeline noat_pipeline_get_handle(const NoatPipeline *pl);
 VkPipelineLayout noat_pipeline_get_layout(const NoatPipeline *pl);
 
-/* Push constants for the vertex shader */
-typedef struct {
-    float qx;
-    float qy;
-} NoatPushConstants;
-
 /* ========================================================================
- * Resources (descriptor sets, uniform buffers, samplers)
- * ========================================================================
+ * Resources
+ * ======================================================================== */
+
+struct NoatResources {
+    VkDevice device;
+    VkPhysicalDevice physical_device;
+    VkCommandPool command_pool;
+    VkQueue queue;
+    uint32_t swapchain_image_count;
+
+    VkDescriptorSetLayout descriptor_set_layout;
+    VkDescriptorPool descriptor_pool;
+    VkDescriptorSet *descriptor_sets;
+
+    VkBuffer *uniform_buffers;
+    VkDeviceMemory *uniform_buffer_memories;
+    VkDeviceSize uniform_buffer_size;
+};
 
 NoatResources *noat_resources_create(VkDevice device, VkPhysicalDevice physical_device,
                                       VkCommandPool command_pool, VkQueue queue,
@@ -181,44 +223,19 @@ VkDescriptorSetLayout noat_resources_get_descriptor_set_layout(const NoatResourc
 const VkDescriptorSet *noat_resources_get_descriptor_sets(const NoatResources *res, uint32_t *count);
 void noat_resources_update_uniform_buffer(NoatResources *res, uint32_t frame_index,
                                           const void *data, size_t size);
-VkDescriptorSetLayout noat_resources_get_descriptor_set_layout(const NoatResources *res);
 
 /* ========================================================================
- * Frame (command buffer, sync objects)
- * ========================================================================
+ * Frame
+ * ======================================================================== */
 
-NoatFrame *noat_frame_create(VkDevice device, uint32_t queue_family);
-void noat_frame_destroy(NoatFrame *frame);
-
-VkCommandBuffer noat_frame_get_command_buffer(const NoatFrame *frame);
-VkSemaphore noat_frame_get_image_available_semaphore(const NoatFrame *frame);
-VkSemaphore noat_frame_get_render_finished_semaphore(const NoatFrame *frame);
-VkFence noat_frame_get_in_flight_fence(const NoatFrame *frame);
-
-void noat_frame_begin_command_buffer(NoatFrame *frame);
-void noat_frame_end_command_buffer(NoatFrame *frame);
-VkFence noat_frame_get_in_flight_fence(const NoatFrame *frame);
-VkSemaphore noat_frame_get_image_available_semaphore(const NoatFrame *frame);
-VkSemaphore noat_frame_get_render_finished_semaphore(const NoatFrame *frame);
-
-/* ========================================================================
- * Resources (descriptor sets, uniform buffers, samplers)
- * ========================================================================
-
-NoatResources *noat_resources_create(VkDevice device, VkPhysicalDevice physical_device,
-                                      VkCommandPool command_pool, VkQueue queue,
-                                      uint32_t swapchain_image_count);
-void noat_resources_destroy(NoatResources *res);
-
-VkDescriptorSetLayout noat_resources_get_descriptor_set_layout(const NoatResources *res);
-const VkDescriptorSet *noat_resources_get_descriptor_sets(const NoatResources *res, uint32_t *count);
-void noat_resources_update_uniform_buffer(NoatResources *res, uint32_t frame_index,
-                                          const void *data, size_t size);
-VkDescriptorSetLayout noat_resources_get_descriptor_set_layout(const NoatResources *res);
-
-/* ========================================================================
- * Frame (command buffer, sync objects)
- * ========================================================================
+struct NoatFrame {
+    VkDevice device;
+    VkCommandPool command_pool;
+    VkCommandBuffer command_buffer;
+    VkSemaphore image_available_semaphore;
+    VkSemaphore render_finished_semaphore;
+    VkFence in_flight_fence;
+};
 
 NoatFrame *noat_frame_create(VkDevice device, uint32_t queue_family);
 void noat_frame_destroy(NoatFrame *frame);
@@ -232,13 +249,27 @@ void noat_frame_begin_command_buffer(NoatFrame *frame);
 void noat_frame_end_command_buffer(NoatFrame *frame);
 
 /* ========================================================================
- * Renderer - main entry point
- * ========================================================================
+ * Renderer
+ * ======================================================================== */
 
 typedef struct {
     int width;
     int height;
 } NoatExtent;
+
+struct NoatRenderer {
+    NoatContext *context;
+    NoatRenderPass *render_pass;
+    NoatPipeline *pipeline;
+    NoatResources *resources;
+    NoatFrame **frames;
+    VkCommandPool command_pool;
+    uint32_t current_frame;
+    int initialized;
+    NoatLightParams light;
+    NoatMaterialParams material;
+    const NoatPaperSize *current_size;
+};
 
 NoatRenderer *noat_renderer_create(void);
 void noat_renderer_destroy(NoatRenderer *renderer);

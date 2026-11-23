@@ -10,15 +10,6 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
-struct NoatFrame {
-    VkDevice device;
-    VkCommandPool command_pool;
-    VkCommandBuffer command_buffer;
-    VkSemaphore image_available_semaphore;
-    VkSemaphore render_finished_semaphore;
-    VkFence in_flight_fence;
-};
-
 NoatFrame *noat_frame_create(VkDevice device, uint32_t queue_family) {
     NoatFrame *frame = calloc(1, sizeof(NoatFrame));
     if (!frame) return NULL;
@@ -93,16 +84,4 @@ void noat_frame_begin_command_buffer(NoatFrame *frame) {
 
 void noat_frame_end_command_buffer(NoatFrame *frame) {
     vkEndCommandBuffer(frame->command_buffer);
-}
-
-VkFence noat_frame_get_in_flight_fence(const NoatFrame *frame) {
-    return frame ? frame->in_flight_fence : VK_NULL_HANDLE;
-}
-
-VkSemaphore noat_frame_get_image_available_semaphore(const NoatFrame *frame) {
-    return frame ? frame->image_available_semaphore : VK_NULL_HANDLE;
-}
-
-VkSemaphore noat_frame_get_render_finished_semaphore(const NoatFrame *frame) {
-    return frame ? frame->render_finished_semaphore : VK_NULL_HANDLE;
 }

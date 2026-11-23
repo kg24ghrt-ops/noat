@@ -204,5 +204,3 @@ Java_com_example_noat_PaperLib_paperGetInfo(JNIEnv* env, jobject /* thiz */) {
     pthread_mutex_unlock(&g_renderer_mutex);
     return (*env)->NewStringUTF(env, info);
 }
-    pthread_mutex_unlock(&g_renderer_mutex);
-}

@@ -35,29 +35,6 @@ static const char *kValidationLayers[] = {
 };
 #define VALIDATION_LAYER_COUNT 1
 
-struct NoatContext {
-    VkInstance instance;
-    VkSurfaceKHR surface;
-    VkPhysicalDevice physical_device;
-    VkDevice device;
-    VkQueue graphics_queue;
-    uint32_t graphics_queue_family;
-    VkSurfaceFormatKHR surface_format;
-    VkExtent2D extent;
-    VkSwapchainKHR swapchain;
-    VkImageView *image_views;
-    VkImage *images;
-    uint32_t image_count;
-    int width;
-    int height;
-    int initialized;
-    int validation_layers_active;
-};
-
-static const char *kValidationLayers[] = {
-    "VK_LAYER_KHRONOS_validation"
-};
-
 static VkBool32 debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
                                VkDebugUtilsMessageTypeFlagsEXT type,
                                const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
@@ -97,7 +74,7 @@ static int create_instance(NoatContext *ctx, int enable_validation) {
     for (int i = 0; i < INSTANCE_EXT_COUNT; i++) {
         int found = 0;
         for (uint32_t j = 0; j < ext_count; j++) {
-            if (strcmp(kInstanceExtensions[i], ext[j].extensionName) == 0) {
+            if (strcmp(kInstanceExtensions[i], avail_exts[j].extensionName) == 0) {
                 found = 1;
                 break;
             }
@@ -281,7 +258,6 @@ static int create_swapchain(NoatContext *ctx) {
         surface_format = (VkSurfaceFormatKHR){VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
     }
     ctx->surface_format = surface_format;
-    ctx->surface_format_khr = surface_format;
     free(formats);
 
     uint32_t present_mode_count = 0;
@@ -325,7 +301,7 @@ static int create_swapchain(NoatContext *ctx) {
         .oldSwapchain = VK_NULL_HANDLE,
     };
 
-    VkResult result = vkCreateSwapchainKHR(ctx->device, &ctx->swapchain, NULL, &ctx->swapchain);
+    VkResult result = vkCreateSwapchainKHR(ctx->device, &create_info, NULL, &ctx->swapchain);
     if (result != VK_SUCCESS) {
         LOGE("Failed to create swapchain: %d", result);
         return 0;
@@ -334,7 +310,7 @@ static int create_swapchain(NoatContext *ctx) {
     ctx->swapchain_format = ctx->surface_format.format;
     ctx->extent = ctx->extent;
 
-    uint32_t image_count = 0;
+    image_count = 0;
     vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &image_count, NULL);
     ctx->images = malloc(image_count * sizeof(VkImage));
     vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &image_count, ctx->images);
@@ -447,25 +423,9 @@ const VkImageView *noat_context_get_swapchain_image_views(const NoatContext *ctx
 }
 int noat_context_get_width(const NoatContext *ctx) { return ctx->width; }
 int noat_context_get_height(const NoatContext *ctx) { return ctx->height; }
-const VkSurfaceFormatKHR *noat_context_get_surface_format(const NoatContext *ctx) { return &ctx->surface_format_khr; }
+const VkSurfaceFormatKHR *noat_context_get_surface_format(const NoatContext *ctx) { return &ctx->surface_format; }
 VkSurfaceKHR noat_context_get_surface(const NoatContext *ctx) { return ctx->surface; }
 VkInstance noat_context_get_instance(const NoatContext *ctx) { return ctx->instance; }
-int noat_context_get_image_count(const NoatContext *ctx) { return ctx->image_count; }
-const VkImageView *noat_context_get_swapchain_image_views(const NoatContext *ctx, uint32_t *count) {
-    if (count) *count = ctx->image_count;
-    return ctx->image_views;
-}
-VkFormat noat_context_get_swapchain_format(const NoatContext *ctx) { return ctx->swapchain_format; }
-VkExtent2D noat_context_get_extent(const NoatContext *ctx) { return ctx->extent; }
-VkSwapchainKHR noat_context_get_swapchain(const NoatContext *ctx) { return ctx->swapchain; }
-uint32_t noat_context_get_image_count(const NoatContext *ctx) { return ctx->image_count; }
-const VkImageView *noat_context_get_swapchain_image_views(const NoatContext *ctx, uint32_t *count) {
-    if (count) *count = ctx->image_count;
-    return ctx->image_views;
-}
-VkFormat noat_context_get_swapchain_format(const NoatContext *ctx) { return ctx->swapchain_format; }
-VkExtent2D noat_context_get_extent(const NoatContext *ctx) { return ctx->extent; }
-VkSwapchainKHR noat_context_get_swapchain(const NoatContext *ctx) { return ctx->swapchain; }
 uint32_t noat_context_get_image_count(const NoatContext *ctx) { return ctx->image_count; }
 
 int noat_context_resize(NoatContext *ctx, int width, int height) {

@@ -22,20 +22,6 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
 
-struct NoatRenderer {
-    NoatContext *context;
-    NoatRenderPass *render_pass;
-    NoatPipeline *pipeline;
-    NoatResources *resources;
-    NoatFrame **frames;
-    VkCommandPool command_pool;
-    uint32_t current_frame;
-    int initialized;
-    NoatLightParams light;
-    NoatMaterialParams material;
-    const struct NoatPaperSize *current_size;
-};
-
 NoatRenderer *noat_renderer_create(void) {
     return calloc(1, sizeof(NoatRenderer));
 }
@@ -145,7 +131,6 @@ void noat_renderer_resize(NoatRenderer *r, int width, int height) {
     if (!noat_context_resize(r->context, width, height)) return;
 
     LOGI("Paper renderer surface %dx%d", width, height);
-    r->resources->shutdown();
     // Recreate resources and frames...
     // TODO: Implement full resize logic
 }
@@ -174,7 +159,7 @@ void noat_renderer_render_frame(NoatRenderer *r) {
     uint32_t image_index;
     VkResult result = vkAcquireNextImageKHR(device, r->context->swapchain, UINT64_MAX,
                                             noat_frame_get_image_available_semaphore(r->frames[current_frame]),
-                                            VK_NULL_HANDLE, &imageIndex);
+                                             VK_NULL_HANDLE, &image_index);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         VkFence reset_fence = noat_frame_get_in_flight_fence(r->frames[current_frame]);
         vkResetFences(device, 1, &reset_fence);
@@ -306,13 +291,13 @@ void noat_renderer_render_frame(NoatRenderer *r) {
 }
 
 void noat_renderer_set_paper_size(NoatRenderer *r, const char *size_id) {
-    const PaperSize *size = paper_geometry_find_size(sizeId);
+    const NoatPaperSize *size = noat_paper_find_size(size_id);
     if (!size) {
-        LOGE("Unknown paper size id: %s", sizeId);
+        LOGE("Unknown paper size id: %s", size_id);
         return;
     }
     r->current_size = size;
-    LOGI("Paper size set to %s (%s), %.0fx%.0f mm", sizeId, size->name,
+    LOGI("Paper size set to %s (%s), %.0fx%.0f mm", size_id, size->name,
          size->width_mm, size->height_mm);
 }
 

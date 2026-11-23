@@ -6,15 +6,11 @@
 #include "noat_renderpass.h"
 
 #include <android/log.h>
+#include <stdlib.h>
 
 #define TAG "NoatRenderPass"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
-
-struct NoatRenderPass {
-    VkDevice device;
-    VkRenderPass render_pass;
-};
 
 NoatRenderPass *noat_renderpass_create(VkDevice device, VkFormat color_format) {
     NoatRenderPass *rp = calloc(1, sizeof(NoatRenderPass));
