@@ -22,7 +22,7 @@ set(VULKAN_ENGINE_HDR
     noat_frame.h
     noat_renderer.h
     noat_paper_geometry.h
-    noat_material.h
+    material/noat_material.h
 )
 
 add_library(
