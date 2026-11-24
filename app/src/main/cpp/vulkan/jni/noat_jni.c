@@ -3,6 +3,7 @@
  */
 
 #include <jni.h>
+#include <android/log.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include <pthread.h>
@@ -14,6 +15,7 @@
 #define TAG "PaperLib"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
 
 static NoatRenderer *g_renderer = NULL;
 static pthread_mutex_t g_renderer_mutex = PTHREAD_MUTEX_INITIALIZER;

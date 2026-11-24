@@ -51,9 +51,7 @@ void noat_paper_compute_quad(const NoatPaperSize *size,
     if (size == NULL) {
         return;
     }
-    if (surface_width_px <= 0.0f || surface_height_px <= 0.0f ||
-        isnan(surface_width_px) || isnan(surface_height_px) ||
-        isinf(surface_width_px) || isinf(surface_height_px)) {
+    if (surface_width_px <= 0.0f || surface_height_px <= 0.0f) {
         return;
     }
 
