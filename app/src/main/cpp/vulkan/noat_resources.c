@@ -11,6 +11,11 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
+static int noat_resources_create_descriptor_set_layout(NoatResources *res);
+static int noat_resources_create_descriptor_pool(NoatResources *res, uint32_t max_sets);
+static int noat_resources_create_descriptor_sets(NoatResources *res, uint32_t count);
+static int noat_resources_create_uniform_buffers(NoatResources *res, VkDeviceSize buffer_size);
+
 NoatResources *noat_resources_create(VkDevice device, VkPhysicalDevice physical_device,
                                       VkCommandPool command_pool, VkQueue queue,
                                       uint32_t swapchain_image_count) {

@@ -169,7 +169,8 @@ struct NoatRenderPass {
     VkRenderPass render_pass;
 };
 
-NoatRenderPass *noat_renderpass_create(VkDevice device, VkFormat color_format);
+NoatRenderPass *noat_renderpass_create(VkDevice device, VkFormat color_format,
+                                        VkFormat depth_format);
 void noat_renderpass_destroy(NoatRenderPass *rp);
 VkRenderPass noat_renderpass_get_handle(const NoatRenderPass *rp);
 
@@ -264,6 +265,9 @@ struct NoatRenderer {
     NoatResources *resources;
     NoatFrame **frames;
     VkCommandPool command_pool;
+    VkImage depth_image;
+    VkDeviceMemory depth_memory;
+    VkImageView depth_view;
     uint32_t current_frame;
     int initialized;
     NoatLightParams light;

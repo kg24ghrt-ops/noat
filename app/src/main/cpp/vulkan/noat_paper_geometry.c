@@ -1,3 +1,4 @@
+#include "noat_vulkan.h"
 #include "noat_paper_geometry.h"
 
 #include <math.h>
@@ -22,35 +23,30 @@ const size_t kPaperSizeCount =
 
 const PaperSize *kPaperSizes = kPaperSizesData;
 
-const PaperSize *paper_geometry_default_size(void) {
+const NoatPaperSize *noat_paper_default_size(void) {
     /* Default to A4: index 1 in kPaperSizesData. */
-    return &kPaperSizesData[1];
+    return (const NoatPaperSize *)&kPaperSizesData[1];
 }
 
-const PaperSize *paper_geometry_find_size(const char *id) {
+const NoatPaperSize *noat_paper_find_size(const char *id) {
     if (id == NULL) {
         return NULL;
     }
     for (size_t i = 0; i < kPaperSizeCount; ++i) {
         if (strcmp(kPaperSizesData[i].id, id) == 0) {
-            return &kPaperSizesData[i];
+            return (const NoatPaperSize *)&kPaperSizesData[i];
         }
     }
     return NULL;
 }
 
-void paper_geometry_compute_quad(const PaperSize *size,
-                                 float surface_width_px,
-                                 float surface_height_px,
-                                 PaperQuad *result) {
-    /* Guard against NULL result pointer so callers can safely probe. */
-    if (result == NULL) {
-        return;
-    }
-
-    /* Zero-initialise output so callers always get defined values. */
-    result->qx = 0.0f;
-    result->qy = 0.0f;
+void noat_paper_compute_quad(const NoatPaperSize *size,
+                             float surface_width_px,
+                             float surface_height_px,
+                             float *qx, float *qy) {
+    /* Guard against NULL output pointers so callers can safely probe. */
+    if (qx) *qx = 0.0f;
+    if (qy) *qy = 0.0f;
 
     if (size == NULL) {
         return;
@@ -58,6 +54,10 @@ void paper_geometry_compute_quad(const PaperSize *size,
     if (surface_width_px <= 0.0f || surface_height_px <= 0.0f ||
         isnan(surface_width_px) || isnan(surface_height_px) ||
         isinf(surface_width_px) || isinf(surface_height_px)) {
+        return;
+    }
+
+    if (qx == NULL && qy == NULL) {
         return;
     }
 
@@ -72,21 +72,43 @@ void paper_geometry_compute_quad(const PaperSize *size,
      * rel < 1 : paper is taller than screen → fill height, constrain width. */
     float rel = paper_aspect / screen_aspect;
 
-    /* Available scale after applying PAPER_SCALE (0.85 = 85% fill, 7.5%
-     * margin on each side). */
-    float scale = PAPER_SCALE;
-    float qx, qy;
+    /* Available scale after applying NOAT_PAPER_SCALE (0.85 = 85% fill,
+     * 7.5% margin on each side). */
+    float scale = NOAT_PAPER_SCALE;
 
     if (rel > 1.0f) {
         /* Paper wider than screen relative to height → fill width. */
-        qx = scale;
-        qy = scale / rel;
+        *qx = scale;
+        *qy = scale / rel;
     } else {
         /* Paper taller than screen relative to width → fill height. */
-        qy = scale;
-        qx = scale * rel;
+        *qy = scale;
+        *qx = scale * rel;
     }
+}
 
+/* Backward-compatible wrappers for the paper_geometry_* names declared
+ * in noat_paper_geometry.h. These delegate to the noat_paper_* API. */
+const PaperSize *paper_geometry_default_size(void) {
+    return (const PaperSize *)noat_paper_default_size();
+}
+
+const PaperSize *paper_geometry_find_size(const char *id) {
+    return (const PaperSize *)noat_paper_find_size(id);
+}
+
+void paper_geometry_compute_quad(const PaperSize *size,
+                                 float surface_width_px,
+                                 float surface_height_px,
+                                 PaperQuad *result) {
+    if (result == NULL) {
+        noat_paper_compute_quad((const NoatPaperSize *)size,
+                                surface_width_px, surface_height_px, NULL, NULL);
+        return;
+    }
+    float qx, qy;
+    noat_paper_compute_quad((const NoatPaperSize *)size,
+                            surface_width_px, surface_height_px, &qx, &qy);
     result->qx = qx;
     result->qy = qy;
 }

@@ -45,11 +45,12 @@ int noat_renderer_init(NoatRenderer *r, ANativeWindow *window) {
         LOGE("Failed to initialize Vulkan context");
         return 0;
     }
-    LOGI("Vulkan context initialized, format=%d, size=%dx%d, imageCount=%zu",
+    LOGI("Vulkan context initialized, format=%d, size=%dx%d, imageCount=%u",
          r->context->swapchain_format, r->context->width, r->context->height,
          r->context->image_count);
 
-    r->render_pass = noat_renderpass_create(r->context->device, r->context->swapchain_format);
+    r->render_pass = noat_renderpass_create(r->context->device, r->context->swapchain_format,
+                                             VK_FORMAT_D32_SFLOAT);
     if (!r->render_pass) {
         LOGE("Failed to create render pass");
         return 0;
@@ -84,6 +85,74 @@ int noat_renderer_init(NoatRenderer *r, ANativeWindow *window) {
         return 0;
     }
     LOGI("Pipeline created");
+
+    // Depth image for the render pass
+    VkImageCreateInfo depth_image_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = VK_FORMAT_D32_SFLOAT,
+        .extent = {
+            .width = r->context->extent.width,
+            .height = r->context->extent.height,
+            .depth = 1,
+        },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    if (vkCreateImage(r->context->device, &depth_image_info, NULL, &r->depth_image) != VK_SUCCESS) {
+        LOGE("Failed to create depth image");
+        return 0;
+    }
+
+    VkMemoryRequirements depth_mem_req;
+    vkGetImageMemoryRequirements(r->context->device, r->depth_image, &depth_mem_req);
+    VkPhysicalDeviceMemoryProperties mem_props;
+    vkGetPhysicalDeviceMemoryProperties(r->context->physical_device, &mem_props);
+    uint32_t depth_mem_type = UINT32_MAX;
+    for (uint32_t i = 0; i < 32; i++) {
+        if ((depth_mem_req.memoryTypeBits & (1u << i)) &&
+            (mem_props.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+            depth_mem_type = i;
+            break;
+        }
+    }
+    if (depth_mem_type == UINT32_MAX) {
+        LOGE("Failed to find suitable memory type for depth image");
+        return 0;
+    }
+    if (vkAllocateMemory(r->context->device, &(VkMemoryAllocateInfo){
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = depth_mem_req.size,
+        .memoryTypeIndex = depth_mem_type,
+    }, NULL, &r->depth_memory) != VK_SUCCESS) {
+        LOGE("Failed to allocate depth image memory");
+        return 0;
+    }
+    vkBindImageMemory(r->context->device, r->depth_image, r->depth_memory, 0);
+
+    VkImageViewCreateInfo depth_view_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = r->depth_image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = VK_FORMAT_D32_SFLOAT,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+    if (vkCreateImageView(r->context->device, &depth_view_info, NULL, &r->depth_view) != VK_SUCCESS) {
+        LOGE("Failed to create depth image view");
+        return 0;
+    }
+    LOGI("Depth image created: %dx%d", r->context->extent.width, r->context->extent.height);
 
     uint32_t image_count = r->context->image_count;
     r->frames = calloc(image_count, sizeof(NoatFrame*));
@@ -121,6 +190,7 @@ int noat_renderer_init(NoatRenderer *r, ANativeWindow *window) {
 
     // Default to A4
     r->current_size = noat_paper_default_size();
+    r->initialized = 1;
     LOGI("Paper renderer initialized successfully, default size=%s (%.0fx%.0f mm)",
          r->current_size->name, r->current_size->width_mm, r->current_size->height_mm);
     return 1;
@@ -128,11 +198,101 @@ int noat_renderer_init(NoatRenderer *r, ANativeWindow *window) {
 
 void noat_renderer_resize(NoatRenderer *r, int width, int height) {
     if (!r || !r->initialized) return;
+    if (width <= 0 || height <= 0) return;
     if (!noat_context_resize(r->context, width, height)) return;
 
     LOGI("Paper renderer surface %dx%d", width, height);
-    // Recreate resources and frames...
-    // TODO: Implement full resize logic
+
+    // Destroy old depth resources (extent changed)
+    if (r->depth_view) vkDestroyImageView(r->context->device, r->depth_view, NULL);
+    if (r->depth_image) vkDestroyImage(r->context->device, r->depth_image, NULL);
+    if (r->depth_memory) vkFreeMemory(r->context->device, r->depth_memory, NULL);
+    r->depth_view = VK_NULL_HANDLE;
+    r->depth_image = VK_NULL_HANDLE;
+    r->depth_memory = VK_NULL_HANDLE;
+
+    // Recreate depth image with new extent
+    VkImageCreateInfo depth_image_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = VK_FORMAT_D32_SFLOAT,
+        .extent = {
+            .width = r->context->extent.width,
+            .height = r->context->extent.height,
+            .depth = 1,
+        },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    if (vkCreateImage(r->context->device, &depth_image_info, NULL, &r->depth_image) != VK_SUCCESS) {
+        LOGE("Failed to recreate depth image on resize");
+        return;
+    }
+
+    VkMemoryRequirements depth_mem_req;
+    vkGetImageMemoryRequirements(r->context->device, r->depth_image, &depth_mem_req);
+    VkPhysicalDeviceMemoryProperties mem_props;
+    vkGetPhysicalDeviceMemoryProperties(r->context->physical_device, &mem_props);
+    uint32_t depth_mem_type = UINT32_MAX;
+    for (uint32_t i = 0; i < 32; i++) {
+        if ((depth_mem_req.memoryTypeBits & (1u << i)) &&
+            (mem_props.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+            depth_mem_type = i;
+            break;
+        }
+    }
+    if (depth_mem_type == UINT32_MAX) {
+        LOGE("Failed to find suitable memory type for depth image on resize");
+        return;
+    }
+    if (vkAllocateMemory(r->context->device, &(VkMemoryAllocateInfo){
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = depth_mem_req.size,
+        .memoryTypeIndex = depth_mem_type,
+    }, NULL, &r->depth_memory) != VK_SUCCESS) {
+        LOGE("Failed to allocate depth image memory on resize");
+        return;
+    }
+    vkBindImageMemory(r->context->device, r->depth_image, r->depth_memory, 0);
+
+    VkImageViewCreateInfo depth_view_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = r->depth_image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = VK_FORMAT_D32_SFLOAT,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+    if (vkCreateImageView(r->context->device, &depth_view_info, NULL, &r->depth_view) != VK_SUCCESS) {
+        LOGE("Failed to recreate depth image view on resize");
+        return;
+    }
+
+    // Recreate pipeline with new extent
+    noat_pipeline_destroy(r->pipeline);
+    r->pipeline = noat_pipeline_create(r->context->device, r->render_pass->render_pass,
+                                        (VkExtent2D){r->context->width, r->context->height},
+                                        r->resources->descriptor_set_layout);
+    if (!r->pipeline) {
+        LOGE("Failed to recreate pipeline on resize");
+        return;
+    }
+
+    LOGI("Resize complete: %dx%d, paper %s (%.0fx%.0f mm)",
+         r->context->width, r->context->height,
+         r->current_size ? r->current_size->name : "(none)",
+         r->current_size ? r->current_size->width_mm : 0.0f,
+         r->current_size ? r->current_size->height_mm : 0.0f);
 }
 
 void noat_renderer_render_frame(NoatRenderer *r) {
@@ -171,20 +331,23 @@ void noat_renderer_render_frame(NoatRenderer *r) {
     }
     LOGI("renderFrame #%u: acquired image %u", current_frame, image_index);
 
-    vkResetFences(device, 1, &noat_frame_get_in_flight_fence(r->frames[current_frame]));
+    VkFence inflight_fence = noat_frame_get_in_flight_fence(r->frames[current_frame]);
+    vkResetFences(device, 1, &inflight_fence);
 
     // Record command buffer
     noat_frame_begin_command_buffer(r->frames[current_frame]);
     VkCommandBuffer cmd = noat_frame_get_command_buffer(r->frames[current_frame]);
 
-    // Create framebuffer
-    VkFramebuffer framebuffer;
-    VkImageView attachment = r->context->swapchain_image_views[image_index];
+    // Create framebuffer with color + depth attachments
+    VkImageView attachments[2] = {
+        r->context->image_views[image_index],
+        r->depth_view,
+    };
     VkFramebufferCreateInfo fb_info = {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = r->render_pass->render_pass,
-        .attachmentCount = 1,
-        .pAttachments = &attachment,
+        .attachmentCount = 2,
+        .pAttachments = attachments,
         .width = r->context->width,
         .height = r->context->height,
         .layers = 1,
@@ -195,20 +358,23 @@ void noat_renderer_render_frame(NoatRenderer *r) {
         return;
     }
 
+    VkClearValue clear_values[2] = {
+        {{0.0f, 0.0f, 0.0f, 1.0f}},
+        {{1.0f, 0}},
+    };
     VkRenderPassBeginInfo rp_info = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = r->render_pass->render_pass,
         .framebuffer = framebuffer,
         .renderArea = {{0, 0}, {r->context->width, r->context->height}},
-        .clearValueCount = 1,
-        .pClearValues = &(VkClearValue){{.color = {{0.0f, 0.0f, 0.0f, 1.0f}}}},
+        .clearValueCount = 2,
+        .pClearValues = clear_values,
     };
     vkCmdBeginRenderPass(cmd, &rp_info, VK_SUBPASS_CONTENTS_INLINE);
 
     // Push constants
-    NoatPushConstants pc = {};
+    NoatPushConstants pc = {0};
     if (r->current_size) {
-        float qx, qy;
         noat_paper_compute_quad(r->current_size, r->context->width, r->context->height, &pc.qx, &pc.qy);
     }
     vkCmdPushConstants(cmd, r->pipeline->pipeline_layout,
@@ -249,15 +415,17 @@ void noat_renderer_render_frame(NoatRenderer *r) {
     noat_frame_end_command_buffer(r->frames[r->current_frame]);
 
     // Submit
+    VkSemaphore wait_semaphore = noat_frame_get_image_available_semaphore(r->frames[current_frame]);
+    VkSemaphore signal_semaphore = noat_frame_get_render_finished_semaphore(r->frames[current_frame]);
     VkSubmitInfo submit = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &noat_frame_get_image_available_semaphore(r->frames[current_frame]),
+        .pWaitSemaphores = &wait_semaphore,
         .pWaitDstStageMask = (VkPipelineStageFlags[]){VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT},
         .commandBufferCount = 1,
         .pCommandBuffers = &cmd,
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &noat_frame_get_render_finished_semaphore(r->frames[current_frame]),
+        .pSignalSemaphores = &signal_semaphore,
     };
 
     if (vkQueueSubmit(r->context->graphics_queue, 1, &submit,
@@ -268,16 +436,17 @@ void noat_renderer_render_frame(NoatRenderer *r) {
     }
 
     // Present
+    VkSemaphore present_semaphore = noat_frame_get_render_finished_semaphore(r->frames[current_frame]);
     VkPresentInfoKHR present = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &noat_frame_get_render_finished_semaphore(r->frames[current_frame]),
+        .pWaitSemaphores = &present_semaphore,
         .swapchainCount = 1,
         .pSwapchains = &r->context->swapchain,
         .pImageIndices = &image_index,
     };
 
-    VkResult present_result = vkQueuePresentKHR(r->context->graphics_queue, &present_info);
+    VkResult present_result = vkQueuePresentKHR(r->context->graphics_queue, &present);
     if (present_result == VK_ERROR_OUT_OF_DATE_KHR || present_result == VK_SUBOPTIMAL_KHR) {
         LOGI("renderFrame #%u: present out of date/suboptimal (%d)", current_frame, present_result);
     } else if (present_result != VK_SUCCESS) {
@@ -317,6 +486,10 @@ void noat_renderer_shutdown(NoatRenderer *r) {
     if (!r || !r->initialized) return;
 
     vkDeviceWaitIdle(r->context->device);
+
+    if (r->depth_view) vkDestroyImageView(r->context->device, r->depth_view, NULL);
+    if (r->depth_image) vkDestroyImage(r->context->device, r->depth_image, NULL);
+    if (r->depth_memory) vkFreeMemory(r->context->device, r->depth_memory, NULL);
 
     for (uint32_t i = 0; i < r->context->image_count; i++) {
         if (r->frames[i]) noat_frame_destroy(r->frames[i]);

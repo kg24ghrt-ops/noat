@@ -6,6 +6,7 @@
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include <pthread.h>
+#include <stdio.h>
 
 #include "noat_vulkan.h"
 #include "noat_paper_geometry.h"
@@ -172,7 +173,7 @@ Java_com_example_noat_PaperLib_paperRenderFrame(JNIEnv *env, jobject thiz) {
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_noat_PaperLib_paperShutdown(JNIEnv* env, jobject /* thiz */) {
+Java_com_example_noat_PaperLib_paperShutdown(JNIEnv* env, jobject thiz) {
     (void)env;
     (void)thiz;
 
@@ -185,7 +186,7 @@ Java_com_example_noat_PaperLib_paperShutdown(JNIEnv* env, jobject /* thiz */) {
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_example_noat_PaperLib_paperGetInfo(JNIEnv* env, jobject /* thiz */) {
+Java_com_example_noat_PaperLib_paperGetInfo(JNIEnv* env, jobject thiz) {
     (void)env;
     (void)thiz;
 
