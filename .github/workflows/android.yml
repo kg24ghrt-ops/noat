@@ -137,3 +137,23 @@ jobs:
             app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
+
+  c-unit-tests:
+    name: Run C unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Compile and run C unit tests
+        run: |
+          clang -Wall -Wextra -Wpedantic -std=c11 \
+            -I app/src/main/cpp/vulkan \
+            app/src/main/cpp/vulkan/noat_paper_geometry.c \
+            tests/test_paper_geometry.c \
+            -o test_paper_geometry -lm
+          echo "=== Running C unit tests ==="
+          ./test_paper_geometry
+          echo "=== C unit tests complete ==="

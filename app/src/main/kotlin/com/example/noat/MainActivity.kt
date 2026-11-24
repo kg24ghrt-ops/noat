@@ -163,8 +163,8 @@ val PaperSizes = listOf(
     PaperSize("A4",   "A4",   210f, 297f),
     PaperSize("A5",   "A5",   148f, 210f),
     PaperSize("A6",   "A6",   105f, 148f),
-    PaperSize("LETTER", "Letter", 216f, 279f),
-    PaperSize("LEGAL",  "Legal",  216f, 356f),
+    PaperSize("LETTER", "Letter", 215.9f, 279.4f),
+    PaperSize("LEGAL",  "Legal",  215.9f, 355.6f),
 )
 
 /** Default paper size id. Matches kDefaultPaperSizeId in renderer.cpp. */
