@@ -209,8 +209,26 @@ struct alignas(16) Params {
     float smudge_amount;      // 45
     float eraser_amount;      // 46
     float quality;            // 47
+    // ---- wear / sheet shape ----
+    float curl_amount;        // 48
+    float curl_freq;          // 49
+    float corner_lift_amount; // 50
+    float crease_amount;      // 51
+    float crease_x;           // 52
+    float crease_y;           // 53
+    float crease_angle;       // 54
+    float hole_style;         // 55
+    float edge_style;         // 56
+    float coffee_amount;      // 57
+    float water_amount;       // 58
+    float foxing_amount;      // 59
+    float fingerprint_amount; // 60
+    float pencil_smudge_amount; // 61
+    float eraser_abrasion_amount; // 62
+    float edge_aging_amount;  // 63
+    float translucency_amount;// 64
 };
-static_assert(sizeof(Params) == 192, "Params must be 192 bytes");
+static_assert(sizeof(Params) == 260, "Params must be 260 bytes");
 static_assert(offsetof(Params, rule_ink_r) == 48, "rule_ink_r offset");
 static_assert(offsetof(Params, margin_enabled) == 60, "margin_enabled offset");
 static_assert(offsetof(Params, margin_ink_r) == 68, "margin_ink_r offset");
@@ -271,6 +289,24 @@ static Params default_params() {
     p.smudge_amount = 0.25f;
     p.eraser_amount = 0.15f;
     p.quality = 1.0f;
+    // ---- wear / sheet shape defaults ----
+    p.curl_amount = 0.0f;
+    p.curl_freq = 0.02f;
+    p.corner_lift_amount = 0.0f;
+    p.crease_amount = 0.0f;
+    p.crease_x = 107.95f;
+    p.crease_y = 139.7f;
+    p.crease_angle = 0.0f;
+    p.hole_style = 0.0f;
+    p.edge_style = 0.0f;
+    p.coffee_amount = 0.0f;
+    p.water_amount = 0.0f;
+    p.foxing_amount = 0.0f;
+    p.fingerprint_amount = 0.0f;
+    p.pencil_smudge_amount = 0.0f;
+    p.eraser_abrasion_amount = 0.0f;
+    p.edge_aging_amount = 0.0f;
+    p.translucency_amount = 0.0f;
     return p;
 }
 
@@ -351,6 +387,23 @@ static void apply_params_json(Params& p, const JsonValue& v) {
     gf("smudge_amount", p.smudge_amount);
     gf("eraser_amount", p.eraser_amount);
     gf("quality", p.quality);
+    gf("curl_amount", p.curl_amount);
+    gf("curl_freq", p.curl_freq);
+    gf("corner_lift_amount", p.corner_lift_amount);
+    gf("crease_amount", p.crease_amount);
+    gf("crease_x", p.crease_x);
+    gf("crease_y", p.crease_y);
+    gf("crease_angle", p.crease_angle);
+    gf("hole_style", p.hole_style);
+    gf("edge_style", p.edge_style);
+    gf("coffee_amount", p.coffee_amount);
+    gf("water_amount", p.water_amount);
+    gf("foxing_amount", p.foxing_amount);
+    gf("fingerprint_amount", p.fingerprint_amount);
+    gf("pencil_smudge_amount", p.pencil_smudge_amount);
+    gf("eraser_abrasion_amount", p.eraser_abrasion_amount);
+    gf("edge_aging_amount", p.edge_aging_amount);
+    gf("translucency_amount", p.translucency_amount);
 }
 
 // Embedded fullscreen-triangle vertex SPIR-V (generated from shaders/fullscreen_triangle.vert).
