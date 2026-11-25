@@ -150,13 +150,14 @@ static JsonValue json_parse(const std::string& s, std::size_t& i) {
     return v;
 }
 
+static JsonValue load_json_file(const std::string& path);
+
 static JsonValue load_json_file(const std::string& path) {
     std::size_t size = 0;
     std::string data = read_file(path, &size);
     std::size_t i = 0;
     return json_parse(data, i);
 }
-
 // ---------- paper parameter block (std140, matches GLSL PaperParams) ----------
 struct alignas(16) PaperParams {
     float paper_size_mm[2];   // 0
@@ -770,16 +771,17 @@ int main(int argc, char** argv) {
     ubuf_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VkBuffer ubo_buffer = VK_NULL_HANDLE;
     VmaAllocation ubo_alloc = VK_NULL_HANDLE;
-    void* ubo_mapped = nullptr;
     VmaAllocationCreateInfo ubo_alloc_ci = {};
     ubo_alloc_ci.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
     ubo_alloc_ci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
                          VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    VmaAllocationInfo ubo_alloc_info = {};
     if (vmaCreateBuffer(allocator, &ubuf_ci, &ubo_alloc_ci,
-                        &ubo_buffer, &ubo_alloc, &ubo_mapped) != VK_SUCCESS) {
+                        &ubo_buffer, &ubo_alloc, &ubo_alloc_info) != VK_SUCCESS) {
         std::fprintf(stderr, "error: vmaCreateBuffer (ubo) failed\n");
         return 1;
     }
+    void* ubo_mapped = ubo_alloc_info.pMappedData;
 
     PaperParams params = default_paper_params();
     if (!params_path.empty()) {
