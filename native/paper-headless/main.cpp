@@ -158,46 +158,71 @@ static JsonValue load_json_file(const std::string& path) {
     std::size_t i = 0;
     return json_parse(data, i);
 }
-// ---------- paper parameter block (std140, matches GLSL PaperParams) ----------
-struct alignas(16) PaperParams {
-    float paper_size_mm[2];   // 0
-    float warmth;             // 8
-    float fiber;              // 12
-    float formation;          // 16
-    float speckle;            // 20
-    float tooth;              // 24
-    float aniso;              // 28
-    int32_t rule_style;       // 32
-    float rule_gap_mm;        // 36
-    float rule_top_mm;        // 40
-    float rule_weight_mm;     // 44
-    float rule_ink[3];        // 48
-    float rule_ink_pad;       // 60
-    int32_t margin_enabled;   // 64
-    float margin_x_mm;        // 68
-    float margin_ink_pad0;    // 72
-    float margin_ink_pad1;    // 76
-    float margin_ink[3];      // 80
-    float margin_ink_pad2;    // 92
-    float print_fade;         // 96
-    float light_az_deg;       // 100
-    float light_el_deg;       // 104
-    float light_intensity;    // 108
-    float light_temp_k;       // 112
-    float fill_intensity;     // 116
-    float sheen;              // 120
-    float exposure;           // 124
-    float grain;              // 128
-    float vignette;           // 132
+// ---------- single combined parameter block (std140, matches GLSL 'Params') ----------
+// Field order and offsets MUST match shaders/paper_content.frag exactly.
+// All fields are float/int32 (4-byte aligned) so no inter-field padding is needed.
+struct alignas(16) Params {
+    float paper_size_mm[2];   // 0-1
+    float warmth;             // 2
+    float fiber;              // 3
+    float formation;          // 4
+    float speckle;            // 5
+    float tooth;              // 6
+    float aniso;              // 7
+    float rule_style;         // 8
+    float rule_gap_mm;        // 9
+    float rule_top_mm;        // 10
+    float rule_weight_mm;     // 11
+    float rule_ink_r;         // 12
+    float rule_ink_g;         // 13
+    float rule_ink_b;         // 14
+    float margin_enabled;     // 15
+    float margin_x_mm;        // 16
+    float margin_ink_r;       // 17
+    float margin_ink_g;       // 18
+    float margin_ink_b;       // 19
+    float print_fade;         // 20
+    float light_az_deg;       // 21
+    float light_el_deg;       // 22
+    float light_intensity;    // 23
+    float light_temp_k;       // 24
+    float fill_intensity;     // 25
+    float sheen;              // 26
+    float exposure;           // 27
+    float grain;              // 28
+    float vignette;           // 29
+    float content_seed;       // 30
+    float graphite_amount;    // 31
+    float graphite_darkness;  // 32
+    float graphite_smudge;    // 33
+    float graphite_eraser;    // 34
+    float pen_amount;         // 35
+    float pen_color_r;        // 36
+    float pen_color_g;        // 37
+    float pen_color_b;        // 38
+    float pen_feather;        // 39
+    float teacher_amount;     // 40
+    float teacher_color_r;    // 41
+    float teacher_color_g;    // 42
+    float teacher_color_b;    // 43
+    float teacher_marks;      // 44
+    float smudge_amount;      // 45
+    float eraser_amount;      // 46
+    float quality;            // 47
 };
-static_assert(sizeof(PaperParams) == 144, "PaperParams must be 144 bytes");
-static_assert(offsetof(PaperParams, rule_ink) == 48, "rule_ink offset");
-static_assert(offsetof(PaperParams, margin_enabled) == 64, "margin_enabled offset");
-static_assert(offsetof(PaperParams, margin_ink) == 80, "margin_ink offset");
-static_assert(offsetof(PaperParams, print_fade) == 96, "print_fade offset");
+static_assert(sizeof(Params) == 192, "Params must be 192 bytes");
+static_assert(offsetof(Params, rule_ink_r) == 48, "rule_ink_r offset");
+static_assert(offsetof(Params, margin_enabled) == 60, "margin_enabled offset");
+static_assert(offsetof(Params, margin_ink_r) == 68, "margin_ink_r offset");
+static_assert(offsetof(Params, print_fade) == 80, "print_fade offset");
+static_assert(offsetof(Params, light_intensity) == 92, "light_intensity offset");
+static_assert(offsetof(Params, pen_color_r) == 144, "pen_color_r offset");
+static_assert(offsetof(Params, pen_feather) == 156, "pen_feather offset");
+static_assert(offsetof(Params, teacher_color_r) == 164, "teacher_color_r offset");
+static_assert(offsetof(Params, teacher_marks) == 176, "teacher_marks offset");
 
-static PaperParams default_paper_params() {
-    PaperParams p{};
+static Params default_params() {
+    Params p{};
     p.paper_size_mm[0] = 215.9f;
     p.paper_size_mm[1] = 279.4f;
     p.warmth = 0.45f;
@@ -206,22 +231,18 @@ static PaperParams default_paper_params() {
     p.speckle = 0.35f;
     p.tooth = 0.85f;
     p.aniso = 0.62f;
-    p.rule_style = 0;
+    p.rule_style = 0.0f;
     p.rule_gap_mm = 7.1f;
     p.rule_top_mm = 25.4f;
     p.rule_weight_mm = 0.22f;
-    p.rule_ink[0] = 0.62f;
-    p.rule_ink[1] = 0.76f;
-    p.rule_ink[2] = 0.85f;
-    p.rule_ink_pad = 0.0f;
-    p.margin_enabled = 1;
+    p.rule_ink_r = 0.62f;
+    p.rule_ink_g = 0.76f;
+    p.rule_ink_b = 0.85f;
+    p.margin_enabled = 1.0f;
     p.margin_x_mm = 31.75f;
-    p.margin_ink_pad0 = 0.0f;
-    p.margin_ink_pad1 = 0.0f;
-    p.margin_ink[0] = 0.85f;
-    p.margin_ink[1] = 0.45f;
-    p.margin_ink[2] = 0.49f;
-    p.margin_ink_pad2 = 0.0f;
+    p.margin_ink_r = 0.85f;
+    p.margin_ink_g = 0.45f;
+    p.margin_ink_b = 0.49f;
     p.print_fade = 0.38f;
     p.light_az_deg = 142.0f;
     p.light_el_deg = 27.0f;
@@ -232,10 +253,28 @@ static PaperParams default_paper_params() {
     p.exposure = 1.02f;
     p.grain = 0.22f;
     p.vignette = 0.38f;
+    p.content_seed = 4321.0f;
+    p.graphite_amount = 0.70f;
+    p.graphite_darkness = 0.85f;
+    p.graphite_smudge = 0.0f;
+    p.graphite_eraser = 0.0f;
+    p.pen_amount = 0.55f;
+    p.pen_color_r = 0.10f;
+    p.pen_color_g = 0.16f;
+    p.pen_color_b = 0.24f;
+    p.pen_feather = 0.50f;
+    p.teacher_amount = 0.45f;
+    p.teacher_color_r = 0.80f;
+    p.teacher_color_g = 0.30f;
+    p.teacher_color_b = 0.34f;
+    p.teacher_marks = 1.0f;
+    p.smudge_amount = 0.25f;
+    p.eraser_amount = 0.15f;
+    p.quality = 1.0f;
     return p;
 }
 
-static void apply_json(PaperParams& p, const JsonValue& v) {
+static void apply_params_json(Params& p, const JsonValue& v) {
     if (v.type != JsonValue::Object) return;
     auto gf = [&](const char* k, float& out) {
         auto it = v.obj.find(k);
@@ -260,23 +299,23 @@ static void apply_json(PaperParams& p, const JsonValue& v) {
     gf("speckle", p.speckle);
     gf("tooth", p.tooth);
     gf("aniso", p.aniso);
-    gi("rule_style", p.rule_style);
+    gf("rule_style", p.rule_style);
     gf("rule_gap_mm", p.rule_gap_mm);
     gf("rule_top_mm", p.rule_top_mm);
     gf("rule_weight_mm", p.rule_weight_mm);
     if (auto it = v.obj.find("rule_ink"); it != v.obj.end() &&
         it->second.type == JsonValue::Array && it->second.arr.size() >= 3) {
-        p.rule_ink[0] = (float)it->second.arr[0].num;
-        p.rule_ink[1] = (float)it->second.arr[1].num;
-        p.rule_ink[2] = (float)it->second.arr[2].num;
+        p.rule_ink_r = (float)it->second.arr[0].num;
+        p.rule_ink_g = (float)it->second.arr[1].num;
+        p.rule_ink_b = (float)it->second.arr[2].num;
     }
-    gi("margin_enabled", p.margin_enabled);
+    gf("margin_enabled", p.margin_enabled);
     gf("margin_x_mm", p.margin_x_mm);
     if (auto it = v.obj.find("margin_ink"); it != v.obj.end() &&
         it->second.type == JsonValue::Array && it->second.arr.size() >= 3) {
-        p.margin_ink[0] = (float)it->second.arr[0].num;
-        p.margin_ink[1] = (float)it->second.arr[1].num;
-        p.margin_ink[2] = (float)it->second.arr[2].num;
+        p.margin_ink_r = (float)it->second.arr[0].num;
+        p.margin_ink_g = (float)it->second.arr[1].num;
+        p.margin_ink_b = (float)it->second.arr[2].num;
     }
     gf("print_fade", p.print_fade);
     gf("light_az_deg", p.light_az_deg);
@@ -288,6 +327,30 @@ static void apply_json(PaperParams& p, const JsonValue& v) {
     gf("exposure", p.exposure);
     gf("grain", p.grain);
     gf("vignette", p.vignette);
+    gf("content_seed", p.content_seed);
+    gf("graphite_amount", p.graphite_amount);
+    gf("graphite_darkness", p.graphite_darkness);
+    gf("graphite_smudge", p.graphite_smudge);
+    gf("graphite_eraser", p.graphite_eraser);
+    gf("pen_amount", p.pen_amount);
+    if (auto it = v.obj.find("pen_color"); it != v.obj.end() &&
+        it->second.type == JsonValue::Array && it->second.arr.size() >= 3) {
+        p.pen_color_r = (float)it->second.arr[0].num;
+        p.pen_color_g = (float)it->second.arr[1].num;
+        p.pen_color_b = (float)it->second.arr[2].num;
+    }
+    gf("pen_feather", p.pen_feather);
+    gf("teacher_amount", p.teacher_amount);
+    if (auto it = v.obj.find("teacher_color"); it != v.obj.end() &&
+        it->second.type == JsonValue::Array && it->second.arr.size() >= 3) {
+        p.teacher_color_r = (float)it->second.arr[0].num;
+        p.teacher_color_g = (float)it->second.arr[1].num;
+        p.teacher_color_b = (float)it->second.arr[2].num;
+    }
+    gf("teacher_marks", p.teacher_marks);
+    gf("smudge_amount", p.smudge_amount);
+    gf("eraser_amount", p.eraser_amount);
+    gf("quality", p.quality);
 }
 
 // Embedded fullscreen-triangle vertex SPIR-V (generated from shaders/fullscreen_triangle.vert).
@@ -745,7 +808,7 @@ int main(int argc, char** argv) {
     dyn_state.dynamicStateCount = 2;
     dyn_state.pDynamicStates = dyn;
 
-    // Descriptor set layout: binding 0 = paper parameter UBO (fragment)
+    // Descriptor set layout: binding 0 = combined paper+content params UBO
     VkDescriptorSetLayoutBinding dsl_binding = {};
     dsl_binding.binding = 0;
     dsl_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -763,10 +826,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Uniform buffer for paper parameters (VMA, host visible)
+    // Single combined parameter buffer (VMA, host visible)
     VkBufferCreateInfo ubuf_ci = {};
     ubuf_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    ubuf_ci.size = sizeof(PaperParams);
+    ubuf_ci.size = sizeof(Params);
     ubuf_ci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
     ubuf_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VkBuffer ubo_buffer = VK_NULL_HANDLE;
@@ -783,11 +846,11 @@ int main(int argc, char** argv) {
     }
     void* ubo_mapped = ubo_alloc_info.pMappedData;
 
-    PaperParams params = default_paper_params();
+    Params params = default_params();
     if (!params_path.empty()) {
-        apply_json(params, load_json_file(params_path));
+        apply_params_json(params, load_json_file(params_path));
     }
-    std::memcpy(ubo_mapped, &params, sizeof(PaperParams));
+    std::memcpy(ubo_mapped, &params, sizeof(Params));
     vmaFlushAllocation(allocator, ubo_alloc, 0, VK_WHOLE_SIZE);
 
     VkDescriptorPoolSize pool_size = {};
@@ -816,7 +879,7 @@ int main(int argc, char** argv) {
     VkDescriptorBufferInfo binfo = {};
     binfo.buffer = ubo_buffer;
     binfo.offset = 0;
-    binfo.range = sizeof(PaperParams);
+    binfo.range = sizeof(Params);
     VkWriteDescriptorSet wds = {};
     wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     wds.dstSet = dset;

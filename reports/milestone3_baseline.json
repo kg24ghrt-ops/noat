@@ -1,0 +1,15 @@
+{
+  "shader": "shaders/paper_content.frag",
+  "target_core": "Mali-G610",
+  "malioc_available": false,
+  "malioc_note": "malioc not installed locally (ARM binary; no local toolchain per constraints). CI ubuntu runner did not have malioc on PATH. Baseline cycles not measured.",
+  "worst_case_cycles": null,
+  "arithmetic_cycles": null,
+  "texture_cycles": null,
+  "load_store_cycles": null,
+  "fp16_usage_notes": "Fragment shader uses highp for paper coordinates/noise/hash, mediump for lighting/color. Mixed precision per Mali-G610 rules. LOD-weighted noise octaves with fade below pixel footprint. UBO uses individual float fields (not arrays) to avoid GLSL std140 vec4 stride mismatch with C++ tight packing.",
+  "gpu_ms_720x1280": 120.93,
+  "gpu_ms_1080x1920": 287.37,
+  "date": "2026-11-25",
+  "commit": "354c6bd"
+}
