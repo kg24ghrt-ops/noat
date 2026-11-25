@@ -228,7 +228,7 @@ struct alignas(16) Params {
     float edge_aging_amount;  // 63
     float translucency_amount;// 64
 };
-static_assert(sizeof(Params) == 260, "Params must be 260 bytes");
+static_assert(sizeof(Params) == 272, "Params must be 272 bytes (alignas(16) pads 260 to 272)");
 static_assert(offsetof(Params, rule_ink_r) == 48, "rule_ink_r offset");
 static_assert(offsetof(Params, margin_enabled) == 60, "margin_enabled offset");
 static_assert(offsetof(Params, margin_ink_r) == 68, "margin_ink_r offset");
