@@ -640,7 +640,8 @@ int main(int argc, char** argv) {
     VmaAllocation buf_alloc = VK_NULL_HANDLE;
     VmaAllocationCreateInfo buf_alloc_ci = {};
     buf_alloc_ci.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    buf_alloc_ci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    buf_alloc_ci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT |
+                         VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
     VmaAllocationInfo alloc_info = {};
     if (vmaCreateBuffer(allocator, &buffer_ci, &buf_alloc_ci,
                         &readback_buffer, &buf_alloc, &alloc_info) != VK_SUCCESS) {
