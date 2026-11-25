@@ -136,17 +136,19 @@ void main() {
     desk_lit *= 1.0 - P.vignette * smoothstep(0.0, 1.0, vign);
 
     // ---------- sheet mask (clean cut edge) ----------
-    highp float inside_x = smoothstep(0.0, 1.0, paper_mm.x) *
-                           smoothstep(P.paper_size_mm.x, 0.0, paper_mm.x);
-    highp float inside_y = smoothstep(0.0, 1.0, paper_mm.y) *
-                           smoothstep(P.paper_size_mm.y, 0.0, paper_mm.y);
-    highp float inside = inside_x * inside_y;
-
     highp float edge_px = max(dFdx(screen.x), dFdy(screen.y));
-    highp float edge_dist = min(min(paper_mm.x, P.paper_size_mm.x - paper_mm.x),
-                                min(paper_mm.y, P.paper_size_mm.y - paper_mm.y));
-    highp float edge_dist_px = edge_dist * scale;
-    highp float sheet_edge = smoothstep(-edge_px * 1.5, edge_px * 1.5, edge_dist_px);
+    highp float eps_px = max(edge_px, 1.0);
+    highp float eps_mm = eps_px / scale;
+    highp float left = clamp(paper_mm.x / eps_mm, 0.0, 1.0);
+    highp float right = clamp((P.paper_size_mm.x - paper_mm.x) / eps_mm, 0.0, 1.0);
+    highp float top = clamp(paper_mm.y / eps_mm, 0.0, 1.0);
+    highp float bottom = clamp((P.paper_size_mm.y - paper_mm.y) / eps_mm, 0.0, 1.0);
+    highp float inside = left * right * top * bottom;
+
+    highp float edge_dist_mm = min(min(paper_mm.x, P.paper_size_mm.x - paper_mm.x),
+                                   min(paper_mm.y, P.paper_size_mm.y - paper_mm.y));
+    highp float edge_dist_px = edge_dist_mm * scale;
+    highp float sheet_edge = smoothstep(-edge_px * 1.0, edge_px * 1.0, edge_dist_px);
     highp float sheet_mask = inside * sheet_edge;
 
     // ---------- paper base ----------
@@ -215,7 +217,7 @@ void main() {
     paper_lit = clamp(paper_lit, 0.0, 1.6);
 
     // ---------- ruling (printed & absorbed, not vector-perfect) ----------
-    highp float rule_ao = 1.0 - smoothstep(0.0, 0.025, height * 0.5);
+    highp float rule_ao = 1.0 - smoothstep(0.5, 1.2, height) * 0.2;
     highp float ruling_mask = 0.0;
     mediump vec3 ruling_col = P.rule_ink;
 
@@ -234,7 +236,7 @@ void main() {
         highp float fade =
             clamp(1.0 - (paper_mm.y - top) * 0.014 * P.print_fade, 0.5, 1.0);
         highp float line =
-            smoothstep(hw + feather, hw - feather, d) * density * fade * rule_ao;
+            (1.0 - smoothstep(hw, hw + feather, d)) * density * fade * rule_ao;
         ruling_mask = max(ruling_mask, line);
     } else if (P.rule_style == 3) {
         // graph: 5 mm grid
@@ -247,13 +249,13 @@ void main() {
         highp float cx = 4.0 + lix * g;
         highp float wx = sin(lix * 1.7 + paper_mm.y * 0.045) * 0.045;
         highp float dx = abs(paper_mm.x - (cx + wx));
-        highp float lx = smoothstep(hw + feather, hw - feather, dx) * fade * rule_ao;
+        highp float lx = (1.0 - smoothstep(hw, hw + feather, dx)) * fade * rule_ao;
 
         highp float liy = floor((paper_mm.y - 4.0) / g + 0.5);
         highp float cy = 4.0 + liy * g;
         highp float wy = sin(liy * 1.7 + paper_mm.x * 0.045) * 0.045;
         highp float dy = abs(paper_mm.y - (cy + wy));
-        highp float ly = smoothstep(hw + feather, hw - feather, dy) * fade * rule_ao;
+        highp float ly = (1.0 - smoothstep(hw, hw + feather, dy)) * fade * rule_ao;
 
         ruling_mask = max(lx, ly);
     }
@@ -265,14 +267,14 @@ void main() {
         highp float d = abs(paper_mm.x - P.margin_x_mm);
         highp float hw = P.rule_weight_mm * 0.5;
         highp float feather = max(footprint_mm, 0.045) * 0.55;
-        margin_mask = smoothstep(hw + feather, hw - feather, d);
+        margin_mask = (1.0 - smoothstep(hw, hw + feather, d));
     }
 
     // ink darkens paper where printed (absorption into fiber/valleys)
-    mediump vec3 rule_tint = ruling_mask * ruling_col * 0.72;
-    albedo = albedo * (1.0 - ruling_mask * 0.42) + rule_tint;
-    mediump vec3 margin_tint = margin_mask * P.margin_ink * 0.85;
-    albedo = albedo * (1.0 - margin_mask * 0.45) + margin_tint;
+    mediump vec3 rule_tint = ruling_col * 0.92;
+    albedo = mix(albedo, rule_tint, ruling_mask * 0.70);
+    mediump vec3 margin_tint = P.margin_ink * 0.92;
+    albedo = mix(albedo, margin_tint, margin_mask * 0.70);
 
     // re-apply lighting to inked regions (lines sit in tooth)
     paper_lit = albedo * diffuse + sheen_col * (1.0 - ruling_mask * 0.3 - margin_mask * 0.3);
