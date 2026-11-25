@@ -656,7 +656,7 @@ int main(int argc, char** argv) {
     VkAttachmentDescription att = {};
     att.format = color_format;
     att.samples = VK_SAMPLE_COUNT_1_BIT;
-    att.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -914,7 +914,7 @@ int main(int argc, char** argv) {
     begin_ci.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(cmd, &begin_ci);
 
-    VkClearValue clear_color = {{0.0f, 0.0f, 0.0f, 0.0f}};
+    VkClearValue clear_color = {{1.0f, 0.0f, 0.0f, 1.0f}};
     VkRenderPassBeginInfo rp_begin = {};
     rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     rp_begin.renderPass = render_pass;
