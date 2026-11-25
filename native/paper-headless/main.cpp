@@ -649,14 +649,12 @@ int main(int argc, char** argv) {
         return 1;
     }
     void* mapped = alloc_info.pMappedData;
-    std::fprintf(stderr, "debug: readback mapped=%p size=%llu\n", mapped,
-                 (unsigned long long)buffer_size);
 
     // ---- Render pass: one subpass, color only, loadOp DONT_CARE ----
     VkAttachmentDescription att = {};
     att.format = color_format;
     att.samples = VK_SAMPLE_COUNT_1_BIT;
-    att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    att.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -914,7 +912,7 @@ int main(int argc, char** argv) {
     begin_ci.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(cmd, &begin_ci);
 
-    VkClearValue clear_color = {{1.0f, 0.0f, 0.0f, 1.0f}};
+    VkClearValue clear_color = {{0.0f, 0.0f, 0.0f, 0.0f}};
     VkRenderPassBeginInfo rp_begin = {};
     rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     rp_begin.renderPass = render_pass;
@@ -978,9 +976,8 @@ int main(int argc, char** argv) {
 
     // ---- Write PNG ----
     if (!out_path.empty()) {
-        int png_ok = stbi_write_png(out_path.c_str(), (int)width, (int)height, 4, mapped,
-                                    (int)row_pitch);
-        std::fprintf(stderr, "debug: stbi_write_png=%d\n", png_ok);
+        stbi_write_png(out_path.c_str(), (int)width, (int)height, 4, mapped,
+                       (int)row_pitch);
         std::fprintf(stderr, "wrote PNG: %s (%ux%u)\n", out_path.c_str(), width, height);
     }
 
