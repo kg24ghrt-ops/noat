@@ -640,8 +640,7 @@ int main(int argc, char** argv) {
     VmaAllocation buf_alloc = VK_NULL_HANDLE;
     VmaAllocationCreateInfo buf_alloc_ci = {};
     buf_alloc_ci.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    buf_alloc_ci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                         VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    buf_alloc_ci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
     VmaAllocationInfo alloc_info = {};
     if (vmaCreateBuffer(allocator, &buffer_ci, &buf_alloc_ci,
                         &readback_buffer, &buf_alloc, &alloc_info) != VK_SUCCESS) {
@@ -649,6 +648,8 @@ int main(int argc, char** argv) {
         return 1;
     }
     void* mapped = alloc_info.pMappedData;
+    std::fprintf(stderr, "debug: readback mapped=%p size=%llu\n", mapped,
+                 (unsigned long long)buffer_size);
 
     // ---- Render pass: one subpass, color only, loadOp DONT_CARE ----
     VkAttachmentDescription att = {};
@@ -961,8 +962,9 @@ int main(int argc, char** argv) {
 
     // ---- Write PNG ----
     if (!out_path.empty()) {
-        stbi_write_png(out_path.c_str(), (int)width, (int)height, 4, mapped,
-                       (int)row_pitch);
+        int png_ok = stbi_write_png(out_path.c_str(), (int)width, (int)height, 4, mapped,
+                                    (int)row_pitch);
+        std::fprintf(stderr, "debug: stbi_write_png=%d\n", png_ok);
         std::fprintf(stderr, "wrote PNG: %s (%ux%u)\n", out_path.c_str(), width, height);
     }
 
