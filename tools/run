@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# tools/run - run the CI-built paper-headless executable on the device
+# Usage: tools/run [paper-headless args...]
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+BIN="${NOAT_HEADLESS_BIN:-ci-out/native/headless-arm64}"
+if [ ! -x "$BIN" ]; then
+  # try common locations
+  for cand in ci-out/native/headless-arm64 ci-out/native/android/build/paper-headless; do
+    if [ -x "$cand" ]; then BIN="$cand"; break; fi
+  done
+fi
+if [ ! -x "$BIN" ]; then
+  echo "[tools/run] ERROR: headless-arm64 not executable at $BIN" >&2
+  echo "  Build it first: tools/ci native" >&2
+  exit 1
+fi
+
+echo "[tools/run] $BIN $*"
+exec "$BIN" "$@"

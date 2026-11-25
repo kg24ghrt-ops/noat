@@ -1,0 +1,113 @@
+name: NOAT CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: noat-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shader:
+    name: Shader lane (GLSL -> SPIR-V)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run shader lane
+        run: bash tools/ci_shader.sh
+
+      - name: Upload SPIR-V + report
+        uses: actions/upload-artifact@v6
+        with:
+          name: shader-artifacts
+          path: |
+            ci-out/shader/*.spv
+            ci-out/shader/report.json
+          if-no-files-found: error
+          retention-days: 14
+
+  native:
+    name: Native lane (Android arm64 headless)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: []
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK + NDK
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-sdk-licenses: true
+          packages: >-
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;30.0.16248370
+            cmake;3.31.6
+
+      - name: Run native lane
+        run: bash tools/ci_native.sh
+        env:
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_ROOT }}
+
+      - name: Upload headless-arm64
+        uses: actions/upload-artifact@v6
+        with:
+          name: headless-arm64
+          path: ci-out/native/headless-arm64
+          if-no-files-found: error
+          retention-days: 14
+
+  apk:
+    name: APK lane (assembleDebug)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: []
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK + NDK
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-sdk-licenses: true
+          packages: >-
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;30.0.16248370
+            cmake;3.31.6
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run apk lane
+        run: bash tools/ci_apk.sh
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: noat-debug-apk
+          path: ci-out/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14

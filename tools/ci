@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# tools/ci - CI lane wrapper for NOAT
+# Usage: tools/ci <lane> [args]
+# Lanes: shader, native, apk
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+lane="${1:-}"
+shift || true
+
+case "$lane" in
+  shader)
+    echo "[ci] running shader lane"
+    bash "$REPO_ROOT/tools/ci_shader.sh" "$@"
+    ;;
+  native)
+    echo "[ci] running native lane"
+    bash "$REPO_ROOT/tools/ci_native.sh" "$@"
+    ;;
+  apk)
+    echo "[ci] running apk lane"
+    bash "$REPO_ROOT/tools/ci_apk.sh" "$@"
+    ;;
+  *)
+    echo "usage: tools/ci <shader|native|apk>" >&2
+    exit 2
+    ;;
+esac
