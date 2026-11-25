@@ -203,15 +203,15 @@ struct alignas(16) Params {
     float quality;            // 47
 };
 static_assert(sizeof(Params) == 192, "Params must be 192 bytes");
-static_assert(offsetof(Params, rule_ink) == 12, "rule_ink offset");
-static_assert(offsetof(Params, margin_enabled) == 15, "margin_enabled offset");
-static_assert(offsetof(Params, margin_ink) == 17, "margin_ink offset");
-static_assert(offsetof(Params, print_fade) == 20, "print_fade offset");
-static_assert(offsetof(Params, light_intensity) == 23, "light_intensity offset");
-static_assert(offsetof(Params, pen_color) == 36, "pen_color offset");
-static_assert(offsetof(Params, pen_feather) == 39, "pen_feather offset");
-static_assert(offsetof(Params, teacher_color) == 41, "teacher_color offset");
-static_assert(offsetof(Params, teacher_marks) == 44, "teacher_marks offset");
+static_assert(offsetof(Params, rule_ink) == 48, "rule_ink offset");
+static_assert(offsetof(Params, margin_enabled) == 60, "margin_enabled offset");
+static_assert(offsetof(Params, margin_ink) == 68, "margin_ink offset");
+static_assert(offsetof(Params, print_fade) == 80, "print_fade offset");
+static_assert(offsetof(Params, light_intensity) == 92, "light_intensity offset");
+static_assert(offsetof(Params, pen_color) == 144, "pen_color offset");
+static_assert(offsetof(Params, pen_feather) == 156, "pen_feather offset");
+static_assert(offsetof(Params, teacher_color) == 164, "teacher_color offset");
+static_assert(offsetof(Params, teacher_marks) == 176, "teacher_marks offset");
 
 static Params default_params() {
     Params p{};
