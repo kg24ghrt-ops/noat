@@ -318,8 +318,8 @@ int main(int argc, char** argv) {
 
     // ---- VMA allocator ----
     VmaVulkanFunctions vk_funcs = {};
-    vk_funcs.pfnGetInstanceProcAddr = vkGetInstanceProcAddr;
-    vk_funcs.pfnGetDeviceProcAddr = vkGetDeviceProcAddr;
+    vk_funcs.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+    vk_funcs.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
     VmaAllocatorCreateInfo vma_ci = {};
     vma_ci.flags = 0;
     vma_ci.physicalDevice = chosen;
@@ -383,12 +383,13 @@ int main(int argc, char** argv) {
     buf_alloc_ci.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
     buf_alloc_ci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
                          VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    void* mapped = nullptr;
+    VmaAllocationInfo alloc_info = {};
     if (vmaCreateBuffer(allocator, &buffer_ci, &buf_alloc_ci,
-                        &readback_buffer, &buf_alloc, &mapped) != VK_SUCCESS) {
+                        &readback_buffer, &buf_alloc, &alloc_info) != VK_SUCCESS) {
         std::fprintf(stderr, "error: vmaCreateBuffer failed\n");
         return 1;
     }
+    void* mapped = alloc_info.pMappedData;
 
     // ---- Render pass: one subpass, color only, loadOp DONT_CARE ----
     VkAttachmentDescription att = {};
