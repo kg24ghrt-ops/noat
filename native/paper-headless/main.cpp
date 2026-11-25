@@ -7,6 +7,7 @@
 #include <stb_image_write.h>
 #include <stb_image.h>
 
+#define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 
 #include <algorithm>
