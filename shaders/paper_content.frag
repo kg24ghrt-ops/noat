@@ -23,14 +23,18 @@ layout(std140, binding = 0) uniform Params {
     float speckle;
     float tooth;
     float aniso;
-    int rule_style;
+    float rule_style;
     float rule_gap_mm;
     float rule_top_mm;
     float rule_weight_mm;
-    float rule_ink[3];
-    int margin_enabled;
+    float rule_ink_r;
+    float rule_ink_g;
+    float rule_ink_b;
+    float margin_enabled;
     float margin_x_mm;
-    float margin_ink[3];
+    float margin_ink_r;
+    float margin_ink_g;
+    float margin_ink_b;
     float print_fade;
     // ---- lighting ----
     float light_az_deg;
@@ -49,10 +53,14 @@ layout(std140, binding = 0) uniform Params {
     float graphite_smudge;
     float graphite_eraser;
     float pen_amount;
-    float pen_color[3];
+    float pen_color_r;
+    float pen_color_g;
+    float pen_color_b;
     float pen_feather;
     float teacher_amount;
-    float teacher_color[3];
+    float teacher_color_r;
+    float teacher_color_g;
+    float teacher_color_b;
     float teacher_marks;
     float smudge_amount;
     float eraser_amount;
@@ -206,7 +214,7 @@ void main() {
 
     // ---------- paper base ----------
     highp float ft_um = footprint_mm * 1000.0;
-    highp float tooth_w = smoothstep(90.0, 12.0, ft_um);
+    highp float tooth_w = smoothstep(12.0, 90.0, ft_um);
 
     highp float formation = fbm_lod(paper_mm * 0.16, 0.5, 0.6, 2.1, footprint_mm) * P.formation;
 
@@ -264,7 +272,7 @@ void main() {
     // ---------- ruling ----------
     float rule_ao = 1.0 - smoothstep(0.5, 1.2, height) * 0.2;
     float ruling_mask = 0.0;
-    vec3 ruling_col = vec3(P.rule_ink[0], P.rule_ink[1], P.rule_ink[2]);
+    vec3 ruling_col = vec3(P.rule_ink_r, P.rule_ink_g, P.rule_ink_b);
 
     if (P.rule_style == 0 || P.rule_style == 1 || P.rule_style == 2) {
         float gap = P.rule_gap_mm;
@@ -312,8 +320,8 @@ void main() {
     }
 
     // ink darkens paper where printed (absorption into fiber/valleys)
-    albedo = mix(albedo, vec3(P.rule_ink[0], P.rule_ink[1], P.rule_ink[2]) * 0.92, ruling_mask * 0.70);
-    albedo = mix(albedo, vec3(P.margin_ink[0], P.margin_ink[1], P.margin_ink[2]) * 0.92, margin_mask * 0.70);
+    albedo = mix(albedo, vec3(P.rule_ink_r, P.rule_ink_g, P.rule_ink_b) * 0.92, ruling_mask * 0.70);
+    albedo = mix(albedo, vec3(P.margin_ink_r, P.margin_ink_g, P.margin_ink_b) * 0.92, margin_mask * 0.70);
 
     // re-apply lighting to inked regions
     paper_lit = albedo * diffuse + sheen_col * (1.0 - ruling_mask * 0.3 - margin_mask * 0.3);
@@ -411,10 +419,10 @@ void main() {
     vec3 graphite_col = vec3(0.30, 0.30, 0.32) * P.graphite_darkness;
     albedo = mix(albedo, graphite_col, graphite_mask * 0.75);
 
-    vec3 pen_col = vec3(P.pen_color[0], P.pen_color[1], P.pen_color[2]) * 0.35;
+    vec3 pen_col = vec3(P.pen_color_r, P.pen_color_g, P.pen_color_b) * 0.35;
     albedo = mix(albedo, pen_col, pen_mask * 0.80);
 
-    vec3 teacher_col = vec3(P.teacher_color[0], P.teacher_color[1], P.teacher_color[2]) * 0.4;
+    vec3 teacher_col = vec3(P.teacher_color_r, P.teacher_color_g, P.teacher_color_b) * 0.4;
     albedo = mix(albedo, teacher_col, teacher_mask * 0.85);
 
     // ---------- smudge / eraser ----------
@@ -440,8 +448,6 @@ void main() {
     // re-light content
     paper_lit = albedo * diffuse + sheen_col * (1.0 - graphite_mask * 0.2 - pen_mask * 0.1);
     paper_lit = clamp(paper_lit, 0.0, 1.6);
-
-    // ---------- contact shadow on desk ----------
     float contact = smoothstep(10.0, 0.0, edge_dist_px);
 
     // ---------- combine desk + paper ----------

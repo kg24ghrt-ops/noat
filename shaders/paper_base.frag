@@ -153,7 +153,7 @@ void main() {
 
     // ---------- paper base ----------
     highp float ft_um = footprint_mm * 1000.0;
-    highp float tooth_w = smoothstep(90.0, 12.0, ft_um);  // fade below ~90um
+    highp float tooth_w = smoothstep(12.0, 90.0, ft_um);  // fade below ~12um pixel footprint
 
     // formation clouds (2-8 mm), low frequency flocculation
     highp float formation = fbm_lod(paper_mm * 0.16, 0.5, 0.6, 2.1, footprint_mm) * P.formation;
