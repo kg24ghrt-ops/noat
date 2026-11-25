@@ -158,46 +158,63 @@ static JsonValue load_json_file(const std::string& path) {
     std::size_t i = 0;
     return json_parse(data, i);
 }
-// ---------- paper parameter block (std140, matches GLSL PaperParams) ----------
-struct alignas(16) PaperParams {
-    float paper_size_mm[2];   // 0
-    float warmth;             // 8
-    float fiber;              // 12
-    float formation;          // 16
-    float speckle;            // 20
-    float tooth;              // 24
-    float aniso;              // 28
-    int32_t rule_style;       // 32
-    float rule_gap_mm;        // 36
-    float rule_top_mm;        // 40
-    float rule_weight_mm;     // 44
-    float rule_ink[3];        // 48
-    float rule_ink_pad;       // 60
-    int32_t margin_enabled;   // 64
-    float margin_x_mm;        // 68
-    float margin_ink_pad0;    // 72
-    float margin_ink_pad1;    // 76
-    float margin_ink[3];      // 80
-    float margin_ink_pad2;    // 92
-    float print_fade;         // 96
-    float light_az_deg;       // 100
-    float light_el_deg;       // 104
-    float light_intensity;    // 108
-    float light_temp_k;       // 112
-    float fill_intensity;     // 116
-    float sheen;              // 120
-    float exposure;           // 124
-    float grain;              // 128
-    float vignette;           // 132
+// ---------- single combined parameter block (std140, matches GLSL 'Params') ----------
+// Field order and offsets MUST match shaders/paper_content.frag exactly.
+// All fields are float/int32 (4-byte aligned) so no inter-field padding is needed.
+struct alignas(16) Params {
+    float paper_size_mm[2];   // 0-1
+    float warmth;             // 2
+    float fiber;              // 3
+    float formation;          // 4
+    float speckle;            // 5
+    float tooth;              // 6
+    float aniso;              // 7
+    int32_t rule_style;       // 8
+    float rule_gap_mm;        // 9
+    float rule_top_mm;        // 10
+    float rule_weight_mm;     // 11
+    float rule_ink[3];        // 12-14
+    int32_t margin_enabled;   // 15
+    float margin_x_mm;        // 16
+    float margin_ink[3];      // 17-19
+    float print_fade;         // 20
+    float light_az_deg;       // 21
+    float light_el_deg;       // 22
+    float light_intensity;    // 23
+    float light_temp_k;       // 24
+    float fill_intensity;     // 25
+    float sheen;              // 26
+    float exposure;           // 27
+    float grain;              // 28
+    float vignette;           // 29
+    float content_seed;       // 30
+    float graphite_amount;    // 31
+    float graphite_darkness;  // 32
+    float graphite_smudge;    // 33
+    float graphite_eraser;    // 34
+    float pen_amount;         // 35
+    float pen_color[3];       // 36-38
+    float pen_feather;        // 39
+    float teacher_amount;     // 40
+    float teacher_color[3];   // 41-43
+    float teacher_marks;      // 44
+    float smudge_amount;      // 45
+    float eraser_amount;      // 46
+    float quality;            // 47
 };
-static_assert(sizeof(PaperParams) == 144, "PaperParams must be 144 bytes");
-static_assert(offsetof(PaperParams, rule_ink) == 48, "rule_ink offset");
-static_assert(offsetof(PaperParams, margin_enabled) == 64, "margin_enabled offset");
-static_assert(offsetof(PaperParams, margin_ink) == 80, "margin_ink offset");
-static_assert(offsetof(PaperParams, print_fade) == 96, "print_fade offset");
+static_assert(sizeof(Params) == 192, "Params must be 192 bytes");
+static_assert(offsetof(Params, rule_ink) == 12, "rule_ink offset");
+static_assert(offsetof(Params, margin_enabled) == 15, "margin_enabled offset");
+static_assert(offsetof(Params, margin_ink) == 17, "margin_ink offset");
+static_assert(offsetof(Params, print_fade) == 20, "print_fade offset");
+static_assert(offsetof(Params, light_intensity) == 23, "light_intensity offset");
+static_assert(offsetof(Params, pen_color) == 36, "pen_color offset");
+static_assert(offsetof(Params, pen_feather) == 39, "pen_feather offset");
+static_assert(offsetof(Params, teacher_color) == 41, "teacher_color offset");
+static_assert(offsetof(Params, teacher_marks) == 44, "teacher_marks offset");
 
-static PaperParams default_paper_params() {
-    PaperParams p{};
+static Params default_params() {
+    Params p{};
     p.paper_size_mm[0] = 215.9f;
     p.paper_size_mm[1] = 279.4f;
     p.warmth = 0.45f;
@@ -213,15 +230,11 @@ static PaperParams default_paper_params() {
     p.rule_ink[0] = 0.62f;
     p.rule_ink[1] = 0.76f;
     p.rule_ink[2] = 0.85f;
-    p.rule_ink_pad = 0.0f;
     p.margin_enabled = 1;
     p.margin_x_mm = 31.75f;
-    p.margin_ink_pad0 = 0.0f;
-    p.margin_ink_pad1 = 0.0f;
     p.margin_ink[0] = 0.85f;
     p.margin_ink[1] = 0.45f;
     p.margin_ink[2] = 0.49f;
-    p.margin_ink_pad2 = 0.0f;
     p.print_fade = 0.38f;
     p.light_az_deg = 142.0f;
     p.light_el_deg = 27.0f;
@@ -232,10 +245,28 @@ static PaperParams default_paper_params() {
     p.exposure = 1.02f;
     p.grain = 0.22f;
     p.vignette = 0.38f;
+    p.content_seed = 4321.0f;
+    p.graphite_amount = 0.70f;
+    p.graphite_darkness = 0.85f;
+    p.graphite_smudge = 0.0f;
+    p.graphite_eraser = 0.0f;
+    p.pen_amount = 0.55f;
+    p.pen_color[0] = 0.10f;
+    p.pen_color[1] = 0.16f;
+    p.pen_color[2] = 0.24f;
+    p.pen_feather = 0.50f;
+    p.teacher_amount = 0.45f;
+    p.teacher_color[0] = 0.80f;
+    p.teacher_color[1] = 0.30f;
+    p.teacher_color[2] = 0.34f;
+    p.teacher_marks = 1.0f;
+    p.smudge_amount = 0.25f;
+    p.eraser_amount = 0.15f;
+    p.quality = 1.0f;
     return p;
 }
 
-static void apply_json(PaperParams& p, const JsonValue& v) {
+static void apply_params_json(Params& p, const JsonValue& v) {
     if (v.type != JsonValue::Object) return;
     auto gf = [&](const char* k, float& out) {
         auto it = v.obj.find(k);
@@ -288,98 +319,30 @@ static void apply_json(PaperParams& p, const JsonValue& v) {
     gf("exposure", p.exposure);
     gf("grain", p.grain);
     gf("vignette", p.vignette);
-}
-
-// ---------- content parameter block (std140, matches GLSL ContentParams, set 0 binding 1) ----------
-struct alignas(16) ContentParams {
-    float content_seed;       // 0
-    float graphite_amount;    // 4
-    float graphite_darkness;  // 8
-    float graphite_smudge;    // 12
-    float graphite_eraser;    // 16
-    float pen_amount;         // 20
-    float pen_color_pad0;     // 24
-    float pen_color_pad1;     // 28
-    float pen_color[3];       // 32
-    float pen_feather;        // 48
-    float teacher_amount;     // 52
-    float teacher_color_pad0; // 56
-    float teacher_color_pad1; // 60
-    float teacher_color[3];   // 64
-    float teacher_marks;      // 80
-    float smudge_amount;      // 84
-    float eraser_amount;      // 88
-    float quality;            // 92
-    float content_pad[3];     // 96
-};
-static_assert(sizeof(ContentParams) == 144, "ContentParams must be 144 bytes");
-static_assert(offsetof(ContentParams, pen_color) == 32, "pen_color offset");
-static_assert(offsetof(ContentParams, pen_feather) == 48, "pen_feather offset");
-static_assert(offsetof(ContentParams, teacher_color) == 64, "teacher_color offset");
-static_assert(offsetof(ContentParams, teacher_marks) == 80, "teacher_marks offset");
-
-static ContentParams default_content_params() {
-    ContentParams c{};
-    c.content_seed = 4321.0f;
-    c.graphite_amount = 0.70f;
-    c.graphite_darkness = 0.85f;
-    c.graphite_smudge = 0.0f;
-    c.graphite_eraser = 0.0f;
-    c.pen_amount = 0.55f;
-    c.pen_color_pad0 = 0.0f;
-    c.pen_color_pad1 = 0.0f;
-    c.pen_color[0] = 0.10f;
-    c.pen_color[1] = 0.16f;
-    c.pen_color[2] = 0.24f;
-    c.pen_feather = 0.50f;
-    c.teacher_amount = 0.45f;
-    c.teacher_color_pad0 = 0.0f;
-    c.teacher_color_pad1 = 0.0f;
-    c.teacher_color[0] = 0.80f;
-    c.teacher_color[1] = 0.30f;
-    c.teacher_color[2] = 0.34f;
-    c.teacher_marks = 1.0f;
-    c.smudge_amount = 0.25f;
-    c.eraser_amount = 0.15f;
-    c.quality = 1.0f;
-    c.content_pad[0] = 0.0f;
-    c.content_pad[1] = 0.0f;
-    c.content_pad[2] = 0.0f;
-    return c;
-}
-
-static void apply_content_json(ContentParams& c, const JsonValue& v) {
-    if (v.type != JsonValue::Object) return;
-    auto gf = [&](const char* k, float& out) {
-        auto it = v.obj.find(k);
-        if (it != v.obj.end() && it->second.type == JsonValue::Number) {
-            out = (float)it->second.num;
-        }
-    };
-    gf("content_seed", c.content_seed);
-    gf("graphite_amount", c.graphite_amount);
-    gf("graphite_darkness", c.graphite_darkness);
-    gf("graphite_smudge", c.graphite_smudge);
-    gf("graphite_eraser", c.graphite_eraser);
-    gf("pen_amount", c.pen_amount);
+    gf("content_seed", p.content_seed);
+    gf("graphite_amount", p.graphite_amount);
+    gf("graphite_darkness", p.graphite_darkness);
+    gf("graphite_smudge", p.graphite_smudge);
+    gf("graphite_eraser", p.graphite_eraser);
+    gf("pen_amount", p.pen_amount);
     if (auto it = v.obj.find("pen_color"); it != v.obj.end() &&
         it->second.type == JsonValue::Array && it->second.arr.size() >= 3) {
-        c.pen_color[0] = (float)it->second.arr[0].num;
-        c.pen_color[1] = (float)it->second.arr[1].num;
-        c.pen_color[2] = (float)it->second.arr[2].num;
+        p.pen_color[0] = (float)it->second.arr[0].num;
+        p.pen_color[1] = (float)it->second.arr[1].num;
+        p.pen_color[2] = (float)it->second.arr[2].num;
     }
-    gf("pen_feather", c.pen_feather);
-    gf("teacher_amount", c.teacher_amount);
+    gf("pen_feather", p.pen_feather);
+    gf("teacher_amount", p.teacher_amount);
     if (auto it = v.obj.find("teacher_color"); it != v.obj.end() &&
         it->second.type == JsonValue::Array && it->second.arr.size() >= 3) {
-        c.teacher_color[0] = (float)it->second.arr[0].num;
-        c.teacher_color[1] = (float)it->second.arr[1].num;
-        c.teacher_color[2] = (float)it->second.arr[2].num;
+        p.teacher_color[0] = (float)it->second.arr[0].num;
+        p.teacher_color[1] = (float)it->second.arr[1].num;
+        p.teacher_color[2] = (float)it->second.arr[2].num;
     }
-    gf("teacher_marks", c.teacher_marks);
-    gf("smudge_amount", c.smudge_amount);
-    gf("eraser_amount", c.eraser_amount);
-    gf("quality", c.quality);
+    gf("teacher_marks", p.teacher_marks);
+    gf("smudge_amount", p.smudge_amount);
+    gf("eraser_amount", p.eraser_amount);
+    gf("quality", p.quality);
 }
 
 // Embedded fullscreen-triangle vertex SPIR-V (generated from shaders/fullscreen_triangle.vert).
@@ -837,33 +800,28 @@ int main(int argc, char** argv) {
     dyn_state.dynamicStateCount = 2;
     dyn_state.pDynamicStates = dyn;
 
-    // Descriptor set layout: binding 0 = paper parameter UBO (fragment)
-    VkDescriptorSetLayoutBinding dsl_bindings[2] = {};
-    dsl_bindings[0].binding = 0;
-    dsl_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    dsl_bindings[0].descriptorCount = 1;
-    dsl_bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    dsl_bindings[0].pImmutableSamplers = nullptr;
-    dsl_bindings[1].binding = 1;
-    dsl_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    dsl_bindings[1].descriptorCount = 1;
-    dsl_bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    dsl_bindings[1].pImmutableSamplers = nullptr;
+    // Descriptor set layout: binding 0 = combined paper+content params UBO
+    VkDescriptorSetLayoutBinding dsl_binding = {};
+    dsl_binding.binding = 0;
+    dsl_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    dsl_binding.descriptorCount = 1;
+    dsl_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    dsl_binding.pImmutableSamplers = nullptr;
 
     VkDescriptorSetLayoutCreateInfo dsl_ci = {};
     dsl_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    dsl_ci.bindingCount = 2;
-    dsl_ci.pBindings = dsl_bindings;
+    dsl_ci.bindingCount = 1;
+    dsl_ci.pBindings = &dsl_binding;
     VkDescriptorSetLayout dsl;
     if (vkCreateDescriptorSetLayout(device, &dsl_ci, nullptr, &dsl) != VK_SUCCESS) {
         std::fprintf(stderr, "error: vkCreateDescriptorSetLayout failed\n");
         return 1;
     }
 
-    // Uniform buffer for paper parameters (VMA, host visible)
+    // Single combined parameter buffer (VMA, host visible)
     VkBufferCreateInfo ubuf_ci = {};
     ubuf_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    ubuf_ci.size = sizeof(PaperParams);
+    ubuf_ci.size = sizeof(Params);
     ubuf_ci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
     ubuf_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VkBuffer ubo_buffer = VK_NULL_HANDLE;
@@ -880,43 +838,16 @@ int main(int argc, char** argv) {
     }
     void* ubo_mapped = ubo_alloc_info.pMappedData;
 
-    PaperParams params = default_paper_params();
+    Params params = default_params();
     if (!params_path.empty()) {
-        apply_json(params, load_json_file(params_path));
+        apply_params_json(params, load_json_file(params_path));
     }
-    std::memcpy(ubo_mapped, &params, sizeof(PaperParams));
+    std::memcpy(ubo_mapped, &params, sizeof(Params));
     vmaFlushAllocation(allocator, ubo_alloc, 0, VK_WHOLE_SIZE);
-
-    // Uniform buffer for content parameters (VMA, host visible)
-    VkBufferCreateInfo cbuf_ci = {};
-    cbuf_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    cbuf_ci.size = sizeof(ContentParams);
-    cbuf_ci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    cbuf_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    VkBuffer cbo_buffer = VK_NULL_HANDLE;
-    VmaAllocation cbo_alloc = VK_NULL_HANDLE;
-    VmaAllocationCreateInfo cbo_alloc_ci = {};
-    cbo_alloc_ci.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    cbo_alloc_ci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                         VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    VmaAllocationInfo cbo_alloc_info = {};
-    if (vmaCreateBuffer(allocator, &cbuf_ci, &cbo_alloc_ci,
-                        &cbo_buffer, &cbo_alloc, &cbo_alloc_info) != VK_SUCCESS) {
-        std::fprintf(stderr, "error: vmaCreateBuffer (cbo) failed\n");
-        return 1;
-    }
-    void* cbo_mapped = cbo_alloc_info.pMappedData;
-
-    ContentParams cparams = default_content_params();
-    if (!params_path.empty()) {
-        apply_content_json(cparams, load_json_file(params_path));
-    }
-    std::memcpy(cbo_mapped, &cparams, sizeof(ContentParams));
-    vmaFlushAllocation(allocator, cbo_alloc, 0, VK_WHOLE_SIZE);
 
     VkDescriptorPoolSize pool_size = {};
     pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    pool_size.descriptorCount = 2;
+    pool_size.descriptorCount = 1;
     VkDescriptorPoolCreateInfo pool_ci2 = {};
     pool_ci2.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     pool_ci2.maxSets = 1;
@@ -940,27 +871,16 @@ int main(int argc, char** argv) {
     VkDescriptorBufferInfo binfo = {};
     binfo.buffer = ubo_buffer;
     binfo.offset = 0;
-    binfo.range = sizeof(PaperParams);
-    VkDescriptorBufferInfo cinfo = {};
-    cinfo.buffer = cbo_buffer;
-    cinfo.offset = 0;
-    cinfo.range = sizeof(ContentParams);
-    VkWriteDescriptorSet wds[2] = {};
-    wds[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    wds[0].dstSet = dset;
-    wds[0].dstBinding = 0;
-    wds[0].dstArrayElement = 0;
-    wds[0].descriptorCount = 1;
-    wds[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    wds[0].pBufferInfo = &binfo;
-    wds[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    wds[1].dstSet = dset;
-    wds[1].dstBinding = 1;
-    wds[1].dstArrayElement = 0;
-    wds[1].descriptorCount = 1;
-    wds[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    wds[1].pBufferInfo = &cinfo;
-    vkUpdateDescriptorSets(device, 2, wds, 0, nullptr);
+    binfo.range = sizeof(Params);
+    VkWriteDescriptorSet wds = {};
+    wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    wds.dstSet = dset;
+    wds.dstBinding = 0;
+    wds.dstArrayElement = 0;
+    wds.descriptorCount = 1;
+    wds.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    wds.pBufferInfo = &binfo;
+    vkUpdateDescriptorSets(device, 1, &wds, 0, nullptr);
 
     VkPushConstantRange pc_range = {};
     pc_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;

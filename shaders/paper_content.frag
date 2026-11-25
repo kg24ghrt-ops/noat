@@ -14,7 +14,8 @@ layout(push_constant) uniform PushConstants {
     float seed;
 } pc;
 
-layout(std140, binding = 0) uniform PaperParams {
+layout(std140, binding = 0) uniform Params {
+    // ---- paper stock ----
     vec2 paper_size_mm;
     float warmth;
     float fiber;
@@ -27,14 +28,11 @@ layout(std140, binding = 0) uniform PaperParams {
     float rule_top_mm;
     float rule_weight_mm;
     float rule_ink[3];
-    float rule_ink_pad;
     int margin_enabled;
     float margin_x_mm;
-    float margin_ink_pad0;
-    float margin_ink_pad1;
     float margin_ink[3];
-    float margin_ink_pad2;
     float print_fade;
+    // ---- lighting ----
     float light_az_deg;
     float light_el_deg;
     float light_intensity;
@@ -44,25 +42,22 @@ layout(std140, binding = 0) uniform PaperParams {
     float exposure;
     float grain;
     float vignette;
-} P;
-
-layout(std140, binding = 1) uniform ContentParams {
+    // ---- content ----
     float content_seed;
     float graphite_amount;
     float graphite_darkness;
     float graphite_smudge;
     float graphite_eraser;
     float pen_amount;
-    vec3 pen_color;
+    float pen_color[3];
     float pen_feather;
     float teacher_amount;
-    vec3 teacher_color;
+    float teacher_color[3];
     float teacher_marks;
     float smudge_amount;
     float eraser_amount;
     float quality;
-    float content_pad[3];
-} C;
+} P;
 
 // ---------- highp hash / noise ----------
 float hash2(vec2 p) {
@@ -122,23 +117,17 @@ vec3 temp_rgb(float K) {
 }
 
 // ---------- stroke shape: believable handwriting mark ----------
-// soft tapered stroke with pressure wobble
 float stroke_mark(vec2 p, vec2 center, vec2 dir, float width, float length,
                   float pressure, float wobble_seed) {
     vec2 d = p - center;
     float along = dot(d, dir);
     float across = dot(d, vec2(-dir.y, dir.x));
-    // taper at ends
     float t = clamp((along + length * 0.5) / length, 0.0, 1.0);
     float taper = 1.0 - 0.6 * abs(t - 0.5) * 2.0;
     taper = clamp(taper, 0.0, 1.0);
-    // pressure wobble along the stroke
     float wob = sin(along * 12.0 + wobble_seed) * 0.12 + 1.0;
     float eff_width = width * taper * wob * pressure;
-    // soft edges
     float falloff = 1.0 - smoothstep(0.0, eff_width, abs(across));
-    // along-axis falloff (rounded caps)
-    float cap = smoothstep(0.0, 0.08, eff_width * 0.5);
     falloff *= clamp(1.0 - abs(along) / (length * 0.5 + 0.05), 0.0, 1.0);
     return falloff * pressure;
 }
@@ -234,7 +223,7 @@ void main() {
     float speckle = 0.0;
     {
         vec2 speck_ij = floor(paper_mm * 0.22);
-        float s = hash2(speck_ij + vec2(C.content_seed * 0.001, 0.0));
+        float s = hash2(speck_ij + vec2(P.content_seed * 0.001, 0.0));
         if (s > 0.988) speckle = -0.045;
         if (s < 0.012) speckle = 0.032;
     }
@@ -323,10 +312,8 @@ void main() {
     }
 
     // ink darkens paper where printed (absorption into fiber/valleys)
-    vec3 rule_tint = ruling_col * 0.92;
-    albedo = mix(albedo, rule_tint, ruling_mask * 0.70);
-    vec3 margin_tint = vec3(P.margin_ink[0], P.margin_ink[1], P.margin_ink[2]) * 0.92;
-    albedo = mix(albedo, margin_tint, margin_mask * 0.70);
+    albedo = mix(albedo, vec3(P.rule_ink[0], P.rule_ink[1], P.rule_ink[2]) * 0.92, ruling_mask * 0.70);
+    albedo = mix(albedo, vec3(P.margin_ink[0], P.margin_ink[1], P.margin_ink[2]) * 0.92, margin_mask * 0.70);
 
     // re-apply lighting to inked regions
     paper_lit = albedo * diffuse + sheen_col * (1.0 - ruling_mask * 0.3 - margin_mask * 0.3);
@@ -337,10 +324,8 @@ void main() {
     paper_lit += vec3(0.13) * rim * sheet_edge;
 
     // ---------- content: pencil graphite ----------
-    // Graphite adheres to tooth peaks: more graphite where tooth_height is high.
     float graphite_mask = 0.0;
-    if (C.graphite_amount > 0.001) {
-        // writing clusters on ruled lines
+    if (P.graphite_amount > 0.001) {
         float gw = P.rule_weight_mm * 0.5;
         float writing = 0.0;
         if (P.rule_style == 0 || P.rule_style == 1 || P.rule_style == 2) {
@@ -350,27 +335,24 @@ void main() {
             for (int ln = 0; ln < 8; ln++) {
                 if (ln >= n_lines) break;
                 float ly = topm + float(ln) * gap;
-                float lseed = C.content_seed + float(ln) * 17.0;
+                float lseed = P.content_seed + float(ln) * 17.0;
                 float wx = 45.0 + hash2(vec2(float(ln), lseed)) * 120.0;
                 writing += word_cluster(paper_mm, ly, wx, lseed);
             }
         } else if (P.rule_style == 4) {
-            // blank: scattered margin doodles / notes
-            float wx = 40.0 + hash2(vec2(C.content_seed, 1.0)) * 130.0;
-            float ly = 60.0 + hash2(vec2(C.content_seed, 2.0)) * 160.0;
-            writing = word_cluster(paper_mm, ly, wx, C.content_seed + 100.0);
+            float wx = 40.0 + hash2(vec2(P.content_seed, 1.0)) * 130.0;
+            float ly = 60.0 + hash2(vec2(P.content_seed, 2.0)) * 160.0;
+            writing = word_cluster(paper_mm, ly, wx, P.content_seed + 100.0);
         }
         writing = clamp(writing, 0.0, 1.0);
 
-        // graphite clings to tooth peaks (high tooth_height -> darker/more)
         float tooth_bite = smoothstep(0.0, 0.5, tooth_height * 1.5);
-        graphite_mask = writing * tooth_bite * C.graphite_amount;
+        graphite_mask = writing * tooth_bite * P.graphite_amount;
     }
 
     // ---------- content: pen ink ----------
-    // Pen ink feathers along fibers: spread along fiber_dir slightly.
     float pen_mask = 0.0;
-    if (C.pen_amount > 0.001) {
+    if (P.pen_amount > 0.001) {
         float pw = P.rule_weight_mm * 0.5;
         float pen_writing = 0.0;
         if (P.rule_style == 0 || P.rule_style == 1 || P.rule_style == 2) {
@@ -379,90 +361,77 @@ void main() {
             int n_lines = int((P.paper_size_mm.y - topm) / gap) + 1;
             for (int ln = 0; ln < 6; ln++) {
                 if (ln >= n_lines) break;
-                float ly = topm + float(ln) * gap + 0.35; // slightly below line
-                float lseed = C.content_seed + float(ln) * 23.0 + 500.0;
+                float ly = topm + float(ln) * gap + 0.35;
+                float lseed = P.content_seed + float(ln) * 23.0 + 500.0;
                 float wx = 55.0 + hash2(vec2(float(ln), lseed)) * 100.0;
                 pen_writing += word_cluster(paper_mm, ly, wx, lseed);
             }
         }
         pen_writing = clamp(pen_writing, 0.0, 1.0);
 
-        // feathering: smear along fiber direction
-        float feather = C.pen_feather * P.fiber * 0.6;
+        float feather = P.pen_feather * P.fiber * 0.6;
         if (feather > 0.001) {
-            // sample shifted along fiber to simulate feather bleed
             vec2 fiber_step = fiber_dir * feather * 0.5;
             float shifted = word_cluster(paper_mm + fiber_step, paper_mm.y, 55.0,
-                                         C.content_seed + 500.0);
+                                         P.content_seed + 500.0);
             pen_writing = max(pen_writing, shifted * 0.4);
         }
-        pen_mask = pen_writing * C.pen_amount;
+        pen_mask = pen_writing * P.pen_amount;
     }
 
     // ---------- content: teacher marks (red) ----------
     float teacher_mask = 0.0;
-    if (C.teacher_amount > 0.001) {
-        float tm = C.teacher_marks;
-        // red checkmark near top right
+    if (P.teacher_amount > 0.001) {
         float cx = P.paper_size_mm.x - 35.0;
         float cy = P.rule_top_mm + 10.0;
         float check = stroke_mark(paper_mm, vec2(cx - 8.0, cy + 4.0), vec2(0.55, -0.85),
-                                  0.35, 14.0, 0.9, C.content_seed + 9000.0);
+                                  0.35, 14.0, 0.9, P.content_seed + 9000.0);
         check += stroke_mark(paper_mm, vec2(cx - 2.0, cy - 4.0), vec2(0.5, 0.7),
-                             0.35, 16.0, 0.9, C.content_seed + 9001.0);
+                             0.35, 16.0, 0.9, P.content_seed + 9001.0);
         teacher_mask += check;
 
-        // red X over a "mistake" word cluster
-        float mx = 150.0 + hash2(vec2(C.content_seed + 77.0)) * 60.0;
+        float mx = 150.0 + hash2(vec2(P.content_seed + 77.0)) * 60.0;
         float my = P.rule_top_mm + P.rule_gap_mm * 3.0 + 4.0;
-        float xseed = C.content_seed + 8000.0;
+        float xseed = P.content_seed + 8000.0;
         teacher_mask += stroke_mark(paper_mm, vec2(mx - 6.0, my - 6.0), vec2(0.7, 0.7),
                                     0.4, 12.0, 0.85, xseed);
         teacher_mask += stroke_mark(paper_mm, vec2(mx + 6.0, my - 6.0), vec2(-0.7, 0.7),
                                     0.4, 12.0, 0.85, xseed + 1.0);
 
-        // red circle in margin
         float mdx = P.margin_x_mm;
         float mdy = P.rule_top_mm + P.rule_gap_mm * 5.0 + 6.0;
         float circ_d = length(paper_mm - vec2(mdx, mdy)) - 5.0;
         float circ = 1.0 - smoothstep(0.0, 0.5, abs(circ_d));
         teacher_mask += circ * 0.9;
 
-        teacher_mask = clamp(teacher_mask, 0.0, 1.0) * C.teacher_amount;
+        teacher_mask = clamp(teacher_mask, 0.0, 1.0) * P.teacher_amount;
     }
 
     // ---------- apply content to albedo ----------
-    // Graphite: dark gray, matte, sits in tooth valleys/peaks
-    vec3 graphite_col = vec3(0.30, 0.30, 0.32) * C.graphite_darkness;
+    vec3 graphite_col = vec3(0.30, 0.30, 0.32) * P.graphite_darkness;
     albedo = mix(albedo, graphite_col, graphite_mask * 0.75);
 
-    // Pen ink: darker, slightly blue-black, feathered into fibers
-    vec3 pen_col = C.pen_color * 0.35;
+    vec3 pen_col = vec3(P.pen_color[0], P.pen_color[1], P.pen_color[2]) * 0.35;
     albedo = mix(albedo, pen_col, pen_mask * 0.80);
 
-    // Teacher marks: red, distinct ink
-    vec3 teacher_col = C.teacher_color * 0.4;
+    vec3 teacher_col = vec3(P.teacher_color[0], P.teacher_color[1], P.teacher_color[2]) * 0.4;
     albedo = mix(albedo, teacher_col, teacher_mask * 0.85);
 
     // ---------- smudge / eraser ----------
-    // Smudge: soft darkening smear across content
-    if (C.smudge_amount > 0.001) {
+    if (P.smudge_amount > 0.001) {
         float smudge_center_x = P.paper_size_mm.x * 0.55;
         float smudge_center_y = P.rule_top_mm + P.rule_gap_mm * 4.0;
         float sd = length(paper_mm - vec2(smudge_center_x, smudge_center_y));
-        float smudge = smoothstep(25.0, 8.0, sd) * C.smudge_amount;
+        float smudge = smoothstep(25.0, 8.0, sd) * P.smudge_amount;
         albedo *= 1.0 - smudge * 0.35;
     }
 
-    // Eraser: lighten content where rubbed (pencil fades)
-    if (C.eraser_amount > 0.001) {
+    if (P.eraser_amount > 0.001) {
         float ex = P.paper_size_mm.x * 0.42;
         float ey = P.rule_top_mm + P.rule_gap_mm * 2.0;
         float ed = length(paper_mm - vec2(ex, ey));
-        float eraser = smoothstep(18.0, 6.0, ed) * C.eraser_amount;
-        // eraser lifts graphite more than ink
+        float eraser = smoothstep(18.0, 6.0, ed) * P.eraser_amount;
         albedo = mix(albedo, vec3(0.93), eraser * graphite_mask * 0.6);
-        // slight paper abrasion (rougher tooth)
         albedo += vec3(eraser * 0.02);
     }
 
@@ -474,14 +443,13 @@ void main() {
 
     // ---------- contact shadow on desk ----------
     float contact = smoothstep(10.0, 0.0, edge_dist_px);
-    vec3 contact_shadow = vec3(0.0) * contact;
 
     // ---------- combine desk + paper ----------
     vec3 color = mix(desk_lit, paper_lit, sheet_mask);
     color *= (1.0 - contact * 0.5 * (1.0 - sheet_mask));
 
     // ---------- grain, vignette, exposure ----------
-    float g = noise2(screen * 2.1 + vec2(C.content_seed * 0.001)) * 2.0 - 1.0;
+    float g = noise2(screen * 2.1 + vec2(P.content_seed * 0.001)) * 2.0 - 1.0;
     color += vec3(g) * P.grain * 0.025;
     color = clamp(color, 0.0, 1.8);
 
