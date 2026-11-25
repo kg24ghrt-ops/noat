@@ -13,12 +13,15 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -32,6 +35,260 @@ struct PushConstants {
     float seed;
 };
 static_assert(sizeof(PushConstants) == 16, "push constants must be 16 bytes");
+
+// ---------- minimal JSON parser ----------
+struct JsonValue {
+    enum Type { Null, Bool, Number, String, Array, Object } type = Null;
+    bool b = false;
+    double num = 0.0;
+    std::string str;
+    std::vector<JsonValue> arr;
+    std::map<std::string, JsonValue> obj;
+};
+
+static std::string json_trim(const std::string& s, std::size_t& i) {
+    while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                            s[i] == '\r' || s[i] == ',')) {
+        ++i;
+    }
+    return s;
+}
+
+static JsonValue json_parse(const std::string& s, std::size_t& i);
+
+static std::string json_parse_string(const std::string& s, std::size_t& i) {
+    std::string out;
+    ++i; // skip opening quote
+    while (i < s.size() && s[i] != '"') {
+        if (s[i] == '\\' && i + 1 < s.size()) {
+            ++i;
+            switch (s[i]) {
+                case 'n': out.push_back('\n'); break;
+                case 't': out.push_back('\t'); break;
+                case 'r': out.push_back('\r'); break;
+                case '"': out.push_back('"'); break;
+                case '\\': out.push_back('\\'); break;
+                default: out.push_back(s[i]); break;
+            }
+            ++i;
+        } else {
+            out.push_back(s[i]);
+            ++i;
+        }
+    }
+    if (i < s.size()) ++i; // skip closing quote
+    return out;
+}
+
+static double json_parse_number(const std::string& s, std::size_t& i) {
+    std::size_t start = i;
+    while (i < s.size() && (std::isdigit((unsigned char)s[i]) || s[i] == '.' ||
+                            s[i] == '-' || s[i] == '+' || s[i] == 'e' ||
+                            s[i] == 'E')) {
+        ++i;
+    }
+    return std::stod(s.substr(start, i - start));
+}
+
+static JsonValue json_parse(const std::string& s, std::size_t& i) {
+    JsonValue v;
+    while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                            s[i] == '\r')) {
+        ++i;
+    }
+    if (i >= s.size()) return v;
+    char c = s[i];
+    if (c == '{') {
+        v.type = JsonValue::Object;
+        ++i;
+        while (i < s.size() && s[i] != '}') {
+            while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                                    s[i] == '\r')) {
+                ++i;
+            }
+            if (i < s.size() && s[i] == '"') {
+                std::string key = json_parse_string(s, i);
+                while (i < s.size() && s[i] != ':') ++i;
+                if (i < s.size()) ++i;
+                v.obj[key] = json_parse(s, i);
+                while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                                        s[i] == '\r')) {
+                    ++i;
+                }
+                if (i < s.size() && s[i] == ',') ++i;
+            } else {
+                break;
+            }
+        }
+        if (i < s.size()) ++i;
+    } else if (c == '[') {
+        v.type = JsonValue::Array;
+        ++i;
+        while (i < s.size() && s[i] != ']') {
+            v.arr.push_back(json_parse(s, i));
+            while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                                    s[i] == '\r')) {
+                ++i;
+            }
+            if (i < s.size() && s[i] == ',') ++i;
+        }
+        if (i < s.size()) ++i;
+    } else if (c == '"') {
+        v.type = JsonValue::String;
+        v.str = json_parse_string(s, i);
+    } else if (c == 't' || c == 'f') {
+        v.type = JsonValue::Bool;
+        v.b = (s.compare(i, 4, "true") == 0);
+        i += v.b ? 4 : 5;
+    } else if (c == 'n') {
+        v.type = JsonValue::Null;
+        i += 4;
+    } else {
+        v.type = JsonValue::Number;
+        v.num = json_parse_number(s, i);
+    }
+    return v;
+}
+
+std::string read_file(const std::string& path, std::size_t* out_size);
+
+static JsonValue load_json_file(const std::string& path) {
+    std::size_t size = 0;
+    std::string data = read_file(path, &size);
+    std::size_t i = 0;
+    return json_parse(data, i);
+}
+// ---------- paper parameter block (std140, matches GLSL PaperParams) ----------
+struct alignas(16) PaperParams {
+    float paper_size_mm[2];   // 0
+    float warmth;             // 8
+    float fiber;              // 12
+    float formation;          // 16
+    float speckle;            // 20
+    float tooth;              // 24
+    float aniso;              // 28
+    int32_t rule_style;       // 32
+    float rule_gap_mm;        // 36
+    float rule_top_mm;        // 40
+    float rule_weight_mm;     // 44
+    float rule_ink[3];        // 48
+    float rule_ink_pad;       // 60
+    int32_t margin_enabled;   // 64
+    float margin_x_mm;        // 68
+    float margin_ink_pad0;    // 72
+    float margin_ink_pad1;    // 76
+    float margin_ink[3];      // 80
+    float margin_ink_pad2;    // 92
+    float print_fade;         // 96
+    float light_az_deg;       // 100
+    float light_el_deg;       // 104
+    float light_intensity;    // 108
+    float light_temp_k;       // 112
+    float fill_intensity;     // 116
+    float sheen;              // 120
+    float exposure;           // 124
+    float grain;              // 128
+    float vignette;           // 132
+};
+static_assert(sizeof(PaperParams) == 144, "PaperParams must be 144 bytes");
+static_assert(offsetof(PaperParams, rule_ink) == 48, "rule_ink offset");
+static_assert(offsetof(PaperParams, margin_enabled) == 64, "margin_enabled offset");
+static_assert(offsetof(PaperParams, margin_ink) == 80, "margin_ink offset");
+static_assert(offsetof(PaperParams, print_fade) == 96, "print_fade offset");
+
+static PaperParams default_paper_params() {
+    PaperParams p{};
+    p.paper_size_mm[0] = 215.9f;
+    p.paper_size_mm[1] = 279.4f;
+    p.warmth = 0.45f;
+    p.fiber = 0.90f;
+    p.formation = 0.75f;
+    p.speckle = 0.35f;
+    p.tooth = 0.85f;
+    p.aniso = 0.62f;
+    p.rule_style = 0;
+    p.rule_gap_mm = 7.1f;
+    p.rule_top_mm = 25.4f;
+    p.rule_weight_mm = 0.22f;
+    p.rule_ink[0] = 0.62f;
+    p.rule_ink[1] = 0.76f;
+    p.rule_ink[2] = 0.85f;
+    p.rule_ink_pad = 0.0f;
+    p.margin_enabled = 1;
+    p.margin_x_mm = 31.75f;
+    p.margin_ink_pad0 = 0.0f;
+    p.margin_ink_pad1 = 0.0f;
+    p.margin_ink[0] = 0.85f;
+    p.margin_ink[1] = 0.45f;
+    p.margin_ink[2] = 0.49f;
+    p.margin_ink_pad2 = 0.0f;
+    p.print_fade = 0.38f;
+    p.light_az_deg = 142.0f;
+    p.light_el_deg = 27.0f;
+    p.light_intensity = 1.05f;
+    p.light_temp_k = 3450.0f;
+    p.fill_intensity = 0.45f;
+    p.sheen = 0.40f;
+    p.exposure = 1.02f;
+    p.grain = 0.22f;
+    p.vignette = 0.38f;
+    return p;
+}
+
+static void apply_json(PaperParams& p, const JsonValue& v) {
+    if (v.type != JsonValue::Object) return;
+    auto gf = [&](const char* k, float& out) {
+        auto it = v.obj.find(k);
+        if (it != v.obj.end() && it->second.type == JsonValue::Number) {
+            out = (float)it->second.num;
+        }
+    };
+    auto gi = [&](const char* k, int32_t& out) {
+        auto it = v.obj.find(k);
+        if (it != v.obj.end() && it->second.type == JsonValue::Number) {
+            out = (int32_t)it->second.num;
+        }
+    };
+    if (auto it = v.obj.find("paper_size_mm"); it != v.obj.end() &&
+        it->second.type == JsonValue::Array && it->second.arr.size() >= 2) {
+        p.paper_size_mm[0] = (float)it->second.arr[0].num;
+        p.paper_size_mm[1] = (float)it->second.arr[1].num;
+    }
+    gf("warmth", p.warmth);
+    gf("fiber", p.fiber);
+    gf("formation", p.formation);
+    gf("speckle", p.speckle);
+    gf("tooth", p.tooth);
+    gf("aniso", p.aniso);
+    gi("rule_style", p.rule_style);
+    gf("rule_gap_mm", p.rule_gap_mm);
+    gf("rule_top_mm", p.rule_top_mm);
+    gf("rule_weight_mm", p.rule_weight_mm);
+    if (auto it = v.obj.find("rule_ink"); it != v.obj.end() &&
+        it->second.type == JsonValue::Array && it->second.arr.size() >= 3) {
+        p.rule_ink[0] = (float)it->second.arr[0].num;
+        p.rule_ink[1] = (float)it->second.arr[1].num;
+        p.rule_ink[2] = (float)it->second.arr[2].num;
+    }
+    gi("margin_enabled", p.margin_enabled);
+    gf("margin_x_mm", p.margin_x_mm);
+    if (auto it = v.obj.find("margin_ink"); it != v.obj.end() &&
+        it->second.type == JsonValue::Array && it->second.arr.size() >= 3) {
+        p.margin_ink[0] = (float)it->second.arr[0].num;
+        p.margin_ink[1] = (float)it->second.arr[1].num;
+        p.margin_ink[2] = (float)it->second.arr[2].num;
+    }
+    gf("print_fade", p.print_fade);
+    gf("light_az_deg", p.light_az_deg);
+    gf("light_el_deg", p.light_el_deg);
+    gf("light_intensity", p.light_intensity);
+    gf("light_temp_k", p.light_temp_k);
+    gf("fill_intensity", p.fill_intensity);
+    gf("sheen", p.sheen);
+    gf("exposure", p.exposure);
+    gf("grain", p.grain);
+    gf("vignette", p.vignette);
+}
 
 // Embedded fullscreen-triangle vertex SPIR-V (generated from shaders/fullscreen_triangle.vert).
 #include "vert_spirv.inc"
@@ -383,8 +640,8 @@ int main(int argc, char** argv) {
     VmaAllocation buf_alloc = VK_NULL_HANDLE;
     VmaAllocationCreateInfo buf_alloc_ci = {};
     buf_alloc_ci.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    buf_alloc_ci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                         VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    buf_alloc_ci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT |
+                         VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
     VmaAllocationInfo alloc_info = {};
     if (vmaCreateBuffer(allocator, &buffer_ci, &buf_alloc_ci,
                         &readback_buffer, &buf_alloc, &alloc_info) != VK_SUCCESS) {
@@ -488,6 +745,88 @@ int main(int argc, char** argv) {
     dyn_state.dynamicStateCount = 2;
     dyn_state.pDynamicStates = dyn;
 
+    // Descriptor set layout: binding 0 = paper parameter UBO (fragment)
+    VkDescriptorSetLayoutBinding dsl_binding = {};
+    dsl_binding.binding = 0;
+    dsl_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    dsl_binding.descriptorCount = 1;
+    dsl_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    dsl_binding.pImmutableSamplers = nullptr;
+
+    VkDescriptorSetLayoutCreateInfo dsl_ci = {};
+    dsl_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    dsl_ci.bindingCount = 1;
+    dsl_ci.pBindings = &dsl_binding;
+    VkDescriptorSetLayout dsl;
+    if (vkCreateDescriptorSetLayout(device, &dsl_ci, nullptr, &dsl) != VK_SUCCESS) {
+        std::fprintf(stderr, "error: vkCreateDescriptorSetLayout failed\n");
+        return 1;
+    }
+
+    // Uniform buffer for paper parameters (VMA, host visible)
+    VkBufferCreateInfo ubuf_ci = {};
+    ubuf_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    ubuf_ci.size = sizeof(PaperParams);
+    ubuf_ci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    ubuf_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkBuffer ubo_buffer = VK_NULL_HANDLE;
+    VmaAllocation ubo_alloc = VK_NULL_HANDLE;
+    VmaAllocationCreateInfo ubo_alloc_ci = {};
+    ubo_alloc_ci.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    ubo_alloc_ci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                         VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    VmaAllocationInfo ubo_alloc_info = {};
+    if (vmaCreateBuffer(allocator, &ubuf_ci, &ubo_alloc_ci,
+                        &ubo_buffer, &ubo_alloc, &ubo_alloc_info) != VK_SUCCESS) {
+        std::fprintf(stderr, "error: vmaCreateBuffer (ubo) failed\n");
+        return 1;
+    }
+    void* ubo_mapped = ubo_alloc_info.pMappedData;
+
+    PaperParams params = default_paper_params();
+    if (!params_path.empty()) {
+        apply_json(params, load_json_file(params_path));
+    }
+    std::memcpy(ubo_mapped, &params, sizeof(PaperParams));
+    vmaFlushAllocation(allocator, ubo_alloc, 0, VK_WHOLE_SIZE);
+
+    VkDescriptorPoolSize pool_size = {};
+    pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    pool_size.descriptorCount = 1;
+    VkDescriptorPoolCreateInfo pool_ci2 = {};
+    pool_ci2.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_ci2.maxSets = 1;
+    pool_ci2.poolSizeCount = 1;
+    pool_ci2.pPoolSizes = &pool_size;
+    VkDescriptorPool dpool;
+    if (vkCreateDescriptorPool(device, &pool_ci2, nullptr, &dpool) != VK_SUCCESS) {
+        std::fprintf(stderr, "error: vkCreateDescriptorPool failed\n");
+        return 1;
+    }
+    VkDescriptorSet dset;
+    VkDescriptorSetAllocateInfo dsa = {};
+    dsa.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    dsa.descriptorPool = dpool;
+    dsa.descriptorSetCount = 1;
+    dsa.pSetLayouts = &dsl;
+    if (vkAllocateDescriptorSets(device, &dsa, &dset) != VK_SUCCESS) {
+        std::fprintf(stderr, "error: vkAllocateDescriptorSets failed\n");
+        return 1;
+    }
+    VkDescriptorBufferInfo binfo = {};
+    binfo.buffer = ubo_buffer;
+    binfo.offset = 0;
+    binfo.range = sizeof(PaperParams);
+    VkWriteDescriptorSet wds = {};
+    wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    wds.dstSet = dset;
+    wds.dstBinding = 0;
+    wds.dstArrayElement = 0;
+    wds.descriptorCount = 1;
+    wds.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    wds.pBufferInfo = &binfo;
+    vkUpdateDescriptorSets(device, 1, &wds, 0, nullptr);
+
     VkPushConstantRange pc_range = {};
     pc_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     pc_range.offset = 0;
@@ -495,6 +834,8 @@ int main(int argc, char** argv) {
 
     VkPipelineLayoutCreateInfo layout_ci = {};
     layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layout_ci.setLayoutCount = 1;
+    layout_ci.pSetLayouts = &dsl;
     layout_ci.pushConstantRangeCount = 1;
     layout_ci.pPushConstantRanges = &pc_range;
     VkPipelineLayout layout;
@@ -581,6 +922,8 @@ int main(int argc, char** argv) {
     rp_begin.pClearValues = &clear_color;
     vkCmdBeginRenderPass(cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
+                            &dset, 0, nullptr);
     vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                        sizeof(PushConstants), &pc);
     VkViewport viewport = {0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f};
@@ -589,6 +932,21 @@ int main(int argc, char** argv) {
     vkCmdSetScissor(cmd, 0, 1, &scissor);
     vkCmdDraw(cmd, 3, 1, 0, 0);
     vkCmdEndRenderPass(cmd);
+
+    // Memory barrier: color attachment writes → transfer read (readback).
+    VkImageMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = color_image;
+    barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                         0, nullptr, 0, nullptr, 1, &barrier);
 
     // Image already in TRANSFER_SRC_OPTIMAL from render pass finalLayout.
     VkBufferImageCopy region = {};
@@ -673,6 +1031,9 @@ int main(int argc, char** argv) {
     vkDestroyRenderPass(device, render_pass, nullptr);
     vkDestroyPipeline(device, pipeline, nullptr);
     vkDestroyPipelineLayout(device, layout, nullptr);
+    vkDestroyDescriptorSetLayout(device, dsl, nullptr);
+    vkDestroyDescriptorPool(device, dpool, nullptr);
+    vmaDestroyBuffer(allocator, ubo_buffer, ubo_alloc);
     vkDestroyCommandPool(device, pool, nullptr);
     vkDestroyFence(device, fence, nullptr);
     vmaDestroyAllocator(allocator);
