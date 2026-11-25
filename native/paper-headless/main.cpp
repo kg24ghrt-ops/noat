@@ -150,7 +150,7 @@ static JsonValue json_parse(const std::string& s, std::size_t& i) {
     return v;
 }
 
-static JsonValue load_json_file(const std::string& path);
+std::string read_file(const std::string& path, std::size_t* out_size = nullptr);
 
 static JsonValue load_json_file(const std::string& path) {
     std::size_t size = 0;
