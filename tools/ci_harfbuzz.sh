@@ -99,7 +99,7 @@ meson setup "$HARFBUZZ_DIR" \
   -Dicu=disabled \
   -Dtests=disabled
 
-meson compile -C "$BUILD_DIR" libharfbuzz -j"$(nproc)"
+meson compile -C "$BUILD_DIR" harfbuzz -j"$(nproc)"
 
 cp "$BUILD_DIR/src/libharfbuzz.a" "$OUT_DIR/libharfbuzz-android-arm64.a"
 echo "[ci_harfbuzz] wrote $OUT_DIR/libharfbuzz-android-arm64.a"
@@ -116,7 +116,7 @@ meson setup "$HARFBUZZ_DIR" \
   -Dicu=disabled \
   -Dtests=disabled
 
-meson compile -C "$HOST_BUILD_DIR" libharfbuzz -j"$(nproc)"
+meson compile -C "$HOST_BUILD_DIR" harfbuzz -j"$(nproc)"
 
 cp "$HOST_BUILD_DIR/src/libharfbuzz.a" "$OUT_DIR/libharfbuzz-host.a"
 echo "[ci_harfbuzz] wrote $OUT_DIR/libharfbuzz-host.a"
