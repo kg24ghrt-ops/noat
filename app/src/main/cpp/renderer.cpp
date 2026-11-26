@@ -14,6 +14,7 @@
 #include "paper_wear_spv.h"
 #include "vert_spirv.inc"
 
+#include <vulkan/vulkan_android.h>
 #include <cstring>
 #include <vector>
 
