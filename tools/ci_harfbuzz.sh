@@ -96,13 +96,6 @@ meson setup "$HARFBUZZ_DIR" \
   --cross-file="$CROSS_FILE" \
   --buildtype=release \
   -Ddefault_library=static \
-  -Dwith_icu=false \
-  -Dwith_freetype=false \
-  -Dwith_glib=false \
-  -Dwith_coretext=false \
-  -Dwith_directwrite=false \
-  -Dwith_fontconfig=false \
-  -Dwith_builtin_freetype=false \
   -Dtests=false \
   -Dutils=false
 
@@ -120,13 +113,6 @@ cd "$HOST_BUILD_DIR"
 meson setup "$HARFBUZZ_DIR" \
   --buildtype=release \
   -Ddefault_library=static \
-  -Dwith_icu=false \
-  -Dwith_freetype=false \
-  -Dwith_glib=false \
-  -Dwith_coretext=false \
-  -Dwith_directwrite=false \
-  -Dwith_fontconfig=false \
-  -Dwith_builtin_freetype=false \
   -Dtests=false \
   -Dutils=false
 
