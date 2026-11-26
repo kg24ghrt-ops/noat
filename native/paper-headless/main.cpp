@@ -1128,6 +1128,7 @@ int main(int argc, char** argv) {
             vkQueueSubmit(queue, 1, &submit, fence);
             vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
             std::fprintf(stderr, "bench: frame %u submitted\n", f);
+        }
         std::fprintf(stderr, "bench: timed done\n");
 
         vkGetQueryPoolResults(device, timestamp_pool, 0, frames * 2,
