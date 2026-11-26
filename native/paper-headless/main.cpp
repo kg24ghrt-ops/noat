@@ -408,6 +408,8 @@ static void apply_params_json(Params& p, const JsonValue& v) {
 
 // Embedded fullscreen-triangle vertex SPIR-V (generated from shaders/fullscreen_triangle.vert).
 #include "vert_spirv.inc"
+#include "shape_run.h"
+#include "sdf_atlas.h"
 
 struct Metrics {
     std::string device;
@@ -540,8 +542,24 @@ int main(int argc, char** argv) {
     uint32_t height = 1280;
     bool bench = false;
     bool use_bake = false;
+    bool do_shape = false;
     uint32_t warmup = 30;
     uint32_t frames = 120;
+    std::string shape_text;
+    std::string shape_text_file;
+    std::string shape_font;
+    float shape_font_size = 24.0f;
+    std::string shape_direction = "ltr";
+    std::string shape_script = "latn";
+    std::string shape_language = "en";
+    std::string shape_out = "shaped_run.json";
+    bool do_bake_atlas = false;
+    std::string atlas_font;
+    std::string atlas_glyphs; // comma-separated glyph ids
+    float atlas_ppem = 24.0f;
+    int32_t atlas_supersample = 4;
+    std::string atlas_out = "atlas.png";
+    std::string atlas_meta = "atlas_meta.json";
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -568,7 +586,134 @@ int main(int argc, char** argv) {
         else if (arg == "--bake") { use_bake = true; }
         else if (arg == "--warmup" && i + 1 < argc) { warmup = (uint32_t)std::stoul(argv[++i]); }
         else if (arg == "--frames" && i + 1 < argc) { frames = (uint32_t)std::stoul(argv[++i]); }
+        else if (arg == "--shape") { do_shape = true; }
+        else if (arg == "--text" && i + 1 < argc) { shape_text = argv[++i]; }
+        else if (arg == "--text-file" && i + 1 < argc) { shape_text_file = argv[++i]; }
+        else if (arg == "--font" && i + 1 < argc) { shape_font = argv[++i]; }
+        else if (arg == "--font-size" && i + 1 < argc) { shape_font_size = std::stof(argv[++i]); }
+        else if (arg == "--direction" && i + 1 < argc) { shape_direction = argv[++i]; }
+        else if (arg == "--script" && i + 1 < argc) { shape_script = argv[++i]; }
+        else if (arg == "--language" && i + 1 < argc) { shape_language = argv[++i]; }
+        else if (arg == "--shape-out" && i + 1 < argc) { shape_out = argv[++i]; }
+        else if (arg == "--bake-atlas") { do_bake_atlas = true; }
+        else if (arg == "--atlas-font" && i + 1 < argc) { atlas_font = argv[++i]; }
+        else if (arg == "--atlas-glyphs" && i + 1 < argc) { atlas_glyphs = argv[++i]; }
+        else if (arg == "--atlas-ppem" && i + 1 < argc) { atlas_ppem = std::stof(argv[++i]); }
+        else if (arg == "--atlas-supersample" && i + 1 < argc) { atlas_supersample = std::stoi(argv[++i]); }
+        else if (arg == "--atlas-out" && i + 1 < argc) { atlas_out = argv[++i]; }
+        else if (arg == "--atlas-meta" && i + 1 < argc) { atlas_meta = argv[++i]; }
         else if (arg == "--ascii") { ascii = true; }
+    }
+
+    // ---- Shaping mode: CPU-only, produces a deterministic shaped-run artifact.
+    // No Vulkan, no font asset bundled -- the font is supplied at runtime via --font.
+    if (do_shape) {
+        std::string utf8;
+        if (!shape_text_file.empty()) {
+            std::size_t sz = 0;
+            utf8 = read_file(shape_text_file, &sz);
+        } else {
+            utf8 = shape_text;
+        }
+        if (utf8.empty()) {
+            std::fprintf(stderr, "error: --shape requires --text or --text-file\n");
+            return 1;
+        }
+        std::vector<unsigned char> font_data;
+        if (!shape_font.empty() && !load_file_bytes(shape_font, font_data)) {
+            std::fprintf(stderr, "error: cannot read font %s\n", shape_font.c_str());
+            return 1;
+        }
+        ShapedRun run = shape_text(utf8.c_str(), static_cast<int32_t>(utf8.size()),
+                                   font_data.empty() ? nullptr : font_data.data(),
+                                   font_data.size(), shape_font_size,
+                                   shape_direction.c_str(), shape_script.c_str(),
+                                   shape_language.c_str());
+        if (run.glyph_count == 0) {
+            std::fprintf(stderr, "error: shaping produced no glyphs\n");
+            return 1;
+        }
+        std::string json = shaped_run_to_json(run);
+        std::ofstream out(shape_out);
+        if (!out) {
+            std::fprintf(stderr, "error: cannot write %s\n", shape_out.c_str());
+            return 1;
+        }
+        out << json;
+        out.flush();
+        std::fprintf(stderr, "wrote shaped run: %s (glyphs=%u clusters=%u)\n",
+                     shape_out.c_str(), run.glyph_count, run.cluster_count);
+        return 0;
+    }
+
+    // ---- Atlas bake mode: CPU-only, produces an SDF glyph atlas PNG + meta.
+    // Consumes glyph IDs (comma list) and bakes one atlas entry per glyph.
+    if (do_bake_atlas) {
+        if (atlas_font.empty() || atlas_glyphs.empty()) {
+            std::fprintf(stderr,
+                         "error: --bake-atlas requires --atlas-font and --atlas-glyphs\n");
+            return 1;
+        }
+        std::vector<unsigned char> font_data;
+        if (!load_file_bytes(atlas_font, font_data)) {
+            std::fprintf(stderr, "error: cannot read font %s\n", atlas_font.c_str());
+            return 1;
+        }
+        std::vector<uint32_t> glyph_ids;
+        {
+            std::stringstream ss(atlas_glyphs);
+            std::string tok;
+            while (std::getline(ss, tok, ',')) {
+                if (tok.empty()) continue;
+                glyph_ids.push_back((uint32_t)std::stoul(tok));
+            }
+        }
+        if (glyph_ids.empty()) {
+            std::fprintf(stderr, "error: --atlas-glyphs produced no glyph ids\n");
+            return 1;
+        }
+        SdfAtlasResult res = bake_sdf_atlas(font_data.data(), font_data.size(),
+                                            glyph_ids, atlas_ppem,
+                                            atlas_supersample);
+        if (res.glyphs.empty()) {
+            std::fprintf(stderr, "error: atlas bake produced no glyphs\n");
+            return 1;
+        }
+        if (!stbi_write_png(atlas_out.c_str(), res.atlas_width, res.atlas_height, 4,
+                            res.atlas_rgba8.data(), res.atlas_width * 4)) {
+            std::fprintf(stderr, "error: cannot write atlas %s\n", atlas_out.c_str());
+            return 1;
+        }
+        // Meta JSON: per-glyph atlas rect + metrics.
+        std::ofstream meta(atlas_meta);
+        if (!meta) {
+            std::fprintf(stderr, "error: cannot write %s\n", atlas_meta.c_str());
+            return 1;
+        }
+        meta << "{\n";
+        meta << "  \"ppem\": " << res.ppem << ",\n";
+        meta << "  \"scale\": " << res.scale << ",\n";
+        meta << "  \"atlas_width\": " << res.atlas_width << ",\n";
+        meta << "  \"atlas_height\": " << res.atlas_height << ",\n";
+        meta << "  \"glyphs\": [\n";
+        for (size_t i = 0; i < res.glyphs.size(); ++i) {
+            const auto& g = res.glyphs[i];
+            meta << "    {\"gid\":" << g.glyph_id
+                 << ",\"x\":" << g.atlas_x << ",\"y\":" << g.atlas_y
+                 << ",\"w\":" << g.atlas_w << ",\"h\":" << g.atlas_h
+                 << ",\"advance_x\":" << g.advance_x
+                 << ",\"bearing_x\":" << g.bearing_x << "}";
+            if (i + 1 < res.glyphs.size()) meta << ",";
+            meta << "\n";
+        }
+        meta << "  ]\n";
+        meta << "}\n";
+        meta.flush();
+        std::fprintf(stderr,
+                     "wrote atlas %s (%dx%d) + meta %s (glyphs=%zu)\n",
+                     atlas_out.c_str(), res.atlas_width, res.atlas_height,
+                     atlas_meta.c_str(), res.glyphs.size());
+        return 0;
     }
 
     // ---- Vulkan instance (headless: no surface, no swapchain) ----
@@ -1159,12 +1304,17 @@ int main(int argc, char** argv) {
 
         // Load bake fragment SPIR-V
         std::string bake_shader_path = shader_path;
-        // Replace .spv with .bake.spv
-        auto dot_spv = bake_shader_path.rfind(".spv");
-        if (dot_spv != std::string::npos) {
-            bake_shader_path = bake_shader_path.substr(0, dot_spv) + ".bake.spv";
+        // NAME.frag.spv -> NAME_bake.frag.spv
+        auto dot_frag_spv = bake_shader_path.rfind(".frag.spv");
+        if (dot_frag_spv != std::string::npos) {
+            bake_shader_path = bake_shader_path.substr(0, dot_frag_spv) + "_bake.frag.spv";
         } else {
-            bake_shader_path += ".bake.spv";
+            auto dot_spv = bake_shader_path.rfind(".spv");
+            if (dot_spv != std::string::npos) {
+                bake_shader_path = bake_shader_path.substr(0, dot_spv) + ".bake.spv";
+            } else {
+                bake_shader_path += ".bake.spv";
+            }
         }
         std::vector<uint32_t> bake_frag_spv = read_spirv(bake_shader_path);
         VkShaderModule bake_vert_mod = VK_NULL_HANDLE, bake_frag_mod = VK_NULL_HANDLE;
@@ -1313,11 +1463,17 @@ int main(int argc, char** argv) {
 
         // Load final fragment SPIR-V
         std::string final_shader_path = shader_path;
-        auto dot_spv2 = final_shader_path.rfind(".spv");
-        if (dot_spv2 != std::string::npos) {
-            final_shader_path = final_shader_path.substr(0, dot_spv2) + "_final.spv";
+        // NAME.frag.spv -> NAME_final.frag.spv
+        auto dot_frag_spv2 = final_shader_path.rfind(".frag.spv");
+        if (dot_frag_spv2 != std::string::npos) {
+            final_shader_path = final_shader_path.substr(0, dot_frag_spv2) + "_final.frag.spv";
         } else {
-            final_shader_path += "_final.spv";
+            auto dot_spv2 = final_shader_path.rfind(".spv");
+            if (dot_spv2 != std::string::npos) {
+                final_shader_path = final_shader_path.substr(0, dot_spv2) + "_final.spv";
+            } else {
+                final_shader_path += "_final.spv";
+            }
         }
         std::vector<uint32_t> final_frag_spv = read_spirv(final_shader_path);
         VkShaderModule final_vert_mod = VK_NULL_HANDLE, final_frag_mod = VK_NULL_HANDLE;
