@@ -55,7 +55,6 @@ fi
 
 # Make HARFBUZZ_DIR absolute before cd into BUILD_DIR (relative paths break).
 HARFBUZZ_DIR="$(cd "$HARFBUZZ_DIR" && pwd)"
-fi
 
 # Install meson/ninja if needed
 if ! command -v meson >/dev/null 2>&1 || ! command -v ninja >/dev/null 2>&1; then
