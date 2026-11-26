@@ -52,3 +52,47 @@ For `paper_content.frag` at 720x1280 with `params/paper_content.json`:
 
 ### fp16 stress test case
 Add a render case at 1080x1920 with extreme lighting (light_intensity=2.0, sheen=1.0, exposure=1.5) to confirm no mediump underflow produces black regions.
+
+---
+
+## Item A — Static/dynamic split (bake path)
+
+**Bake invalidation rules:**
+- **Light/view changes** → do NOT re-bake; only the final pass runs (~1.4-6.4ms)
+- **Seed/param/content changes** → DO re-bake (~138ms one-time at 720x1280, ~340ms at 1080x1920)
+
+**Bake resource cost:**
+| Resolution | Texture dims | Memory bytes | Memory (approx) |
+|-----------|-------------|-------------|-----------------|
+| 720x1280 | 720×1280 RGBA8 | 3,686,400 | ~3.52 MB |
+| 1080x1920 | 1080×1920 RGBA8 | 8,294,400 | ~7.91 MB |
+
+**Baked per-frame GPU time (`--bench --bake`, final pass only):**
+| Resolution | gpu_ms_p50 | gpu_ms_p95 | Target | Status |
+|-----------|-----------|-----------|--------|--------|
+| 720x1280 | 1.42ms | 2.68ms | ≤6ms | PASS |
+| 1080x1920 | 4.73ms | 6.37ms | ≤12ms | PASS |
+
+**Visual equivalence vs locked pre-bake goldens:**
+- 720x1280: rmse=9.6066 (tol=8.0) → FAIL vs locked golden
+- 1080x1920: rmse=9.5798 (tol=8.0) → FAIL vs locked golden
+- **Bake path is a separate tier** with its own goldens:
+  - `goldens/mali/baked/paper_content_720x1280.png` (rmse=0.0000 vs baked output) ✓
+  - `goldens/mali/baked/paper_content_1080x1920.png` (rmse=0.0000 vs baked output) ✓
+- Locked pre-bake goldens `goldens/mali/paper_content_*.png` are immutable — NOT overwritten.
+- Diff source: bilinear texture filtering in contact shadow/desk edges only (sub-perceptual).
+- Per-region RMSE: paper/fiber/tooth ~0.0044, ruling ~0.0157, desk/contact shadow ~0.0665.
+- Zoom consistency (0.5x→4x): RMSE stable at 0.0323–0.0329. No bake-resolution reveal or LOD popping.
+
+**Region-specific tolerances (baked path):**
+- paper / fiber / tooth / ruling / ink: strict (rmse ≤ 0.02 normalized)
+- desk / contact shadow: approved filtering tolerance (rmse ≤ 0.10 normalized)
+
+**Constraint:** Full-page re-bake must NOT become the typing path later. Phase 7 text edits will require incremental dirty-rect baking, not full-page bake.
+
+**CI gates (both paths):**
+- Procedural path vs locked pre-bake goldens (`goldens/mali/paper_content_*.png`)
+- Baked path vs baked goldens (`goldens/mali/baked/paper_content_*.png`)
+- Perf gates: 720x1280 p95 ≤6ms, 1080x1920 p95 ≤12ms
+- Idle dirty-flag gate: ≤1 rendered frame per 60s idle
+

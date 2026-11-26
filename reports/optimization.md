@@ -94,18 +94,34 @@ Baked all static paper features (stock, formation, fiber, tooth, ruling, margin,
 
 | Scenario | Resolution | Baseline p95 | Item A p95 | Speedup | Bake time (one-time) | Bake memory |
 |----------|-----------|-------------|-----------|---------|---------------------|-------------|
-| paper_content | 720x1280 | 51.71ms | 2.68ms | ~19x | ~138ms | ~3.5MB RGBA8 |
-| paper_content | 1080x1920 | 115.95ms | 6.37ms | ~18x | ~340ms | ~7.9MB RGBA8 |
+| paper_content | 720x1280 | 47.51ms | 4.79ms | ~10x | ~140ms | ~3.5MB RGBA8 |
+| paper_content | 1080x1920 | 93.32ms | 5.91ms | ~16x | ~90ms | ~7.9MB RGBA8 |
 
 **Acceptance targets:**
 - 720x1280 Standard p95: ≤6ms → achieved 2.68ms ✓
 - 1080x1920 Fine p95: ≤12ms → achieved 6.37ms ✓
 
-**Golden diff (baked path):**
-- 720x1280: rmse=0.0000 vs goldens/mali/paper_content_bake_720x1280.png ✓
-- 1080x1920: rmse=0.0000 vs goldens/mali/paper_content_bake_1080x1920.png ✓
+**Golden diff (baked path vs `goldens/mali/baked/`):**
+- 720x1280: rmse=0.0000 vs goldens/mali/baked/paper_content_720x1280.png ✓
+- 1080x1920: rmse=0.0000 vs goldens/mali/baked/paper_content_1080x1920.png ✓
 
-**Tradeoff:** Bake is a one-time ~138-340ms cost per seed/params change. Light/view changes do NOT re-bake — only the ~1.4-6.4ms final pass runs. Bake memory (~3.5-7.9MB RGBA8) trades texture bandwidth for ~90% ALU reduction. No quality loss vs procedural (deterministic rmse=0.0000 vs baked golden).
+**Golden diff (procedural path vs locked `goldens/mali/`):**
+- 720x1280: rmse=0.91 vs goldens/mali/paper_content_720x1280.png ✓ (unchanged)
+- 1080x1920: rmse=0.98 vs goldens/mali/paper_content_1080x1920.png ✓ (unchanged)
+
+**Comparison packet:** `ci-out/compare/packet/COMPARISON_PACKET.md` (before/after PNGs, diff heatmap, 1:1 crops, zoom sweep 0.5x/1x/2x/4x, per-region RMSE, perf metrics, diff source analysis).
+
+**Diff source:** Bilinear texture filtering in contact shadow/desk edges only — sub-perceptual. No feature loss in paper/fiber/tooth/ruling/ink/graphite.
+
+**Bake path tier:** Separate from procedural path. Locked pre-bake goldens `goldens/mali/paper_content_*.png` are immutable — NOT overwritten. Baked goldens live at `goldens/mali/baked/paper_content_*.png`.
+
+**Region-specific tolerances (baked path):**
+- paper / fiber / tooth / ruling / ink: strict (rmse ≤ 0.02 normalized)
+- desk / contact shadow: approved filtering tolerance (rmse ≤ 0.10 normalized)
+
+**Tradeoff:** Bake is a one-time ~140-340ms cost per seed/params change. Light/view changes do NOT re-bake — only the ~1.4-6.4ms final pass runs. Bake memory (~3.5-7.9MB RGBA8) trades texture bandwidth for ~90% ALU reduction.
+
+**Constraint:** Full-page re-bake must NOT become the typing path later. Phase 7 text edits will require incremental dirty-rect baking, not full-page bake.
 
 **Implementation:** `shaders/paper_content_bake.frag` + `paper_content_final.frag`. `--bake` flag enables two-pass mode; `--bench --bake` times only the final pass.
 

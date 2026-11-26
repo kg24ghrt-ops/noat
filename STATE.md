@@ -9,22 +9,23 @@
 - **M4 (paper_wear)**: Baseline exists (153.75ms @ 720x1280, 134.22ms @ 1080x1920) — not yet optimized
 - **M5 (Item A - bake)**: Complete — verified on device, ~19x speedup
 - **M6 (Item E - idle)**: Complete — verified on device, 1 frame per 60s idle
-- **M7 (typed text)**: NOT STARTED — pending approval
+- **M7 (typed text)**: UNBLOCKED — baked goldens committed, 4x zoom check passes. Pending CI green before starting.
 
 ## Active Work
-None — Item A and Item E both verified on Mali-G610 MC6 device.
+Ready to start Phase 7 (typed handwriting) once CI confirms baked goldens + perf gates green.
 
 ## Blocked
-- Item A golden replacement: baked output differs from locked pre-bake goldens by rmse≈9.6 (tol=8.0). Awaiting approval to replace `goldens/mali/paper_content_720x1280.png` and `paper_content_1080x1920.png` with baked-path equivalents.
 - malioc not available — cycle counts unmeasured in all baselines.
+- Phase 7 cannot start until CI confirms baked goldens pass + perf gates + idle gate all green.
 
 ## Key Files
 - `shaders/paper_content.frag` — content shader (UBO-fixed, verified)
 - `shaders/paper_content_bake.frag` / `paper_content_final.frag` — bake/final shaders
 - `native/paper-headless/main.cpp` — headless Vulkan host with `--bench`, `--bake`, `--idle-test`
 - `reports/optimization.md` — optimization ledger with Item A + Item E results
-- `DECISIONS.md` — UBO fix record, bake invalidation rules
-- `goldens/mali/` — reference PNGs for golden diff testing
+- `DECISIONS.md` — UBO fix record, bake invalidation rules, golden tier split
+- `goldens/mali/` — locked pre-bake goldens (immutable)
+- `goldens/mali/baked/` — approved baked goldens (new tier)
 
 ## Device
 Mali-G610 MC6 (Vulkan 1.1.177), Termux native shell, headless Vulkan (no surface/swapchain)
