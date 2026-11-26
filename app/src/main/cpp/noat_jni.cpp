@@ -132,12 +132,12 @@ void applySizeId(const char* sizeId, ParamsMirror& p) {
 extern "C" {
 
 JNIEXPORT void JNICALL
-Java_com_example_noat_PaperLib_paperInitWithSurface(JNIEnv*, jobject, jobject surface) {
+Java_com_example_noat_PaperLib_paperInitWithSurface(JNIEnv* env, jobject, jobject surface) {
     auto& r = renderer();
     if (!r.init()) {
         return;
     }
-    ANativeWindow* window = ANativeWindow_fromSurface(nullptr, surface);
+    ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
     if (window == nullptr) {
         return;
     }
