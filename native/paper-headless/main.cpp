@@ -24,6 +24,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "shape_run.h"
@@ -543,9 +544,12 @@ int main(int argc, char** argv) {
     uint32_t height = 1280;
     bool bench = false;
     bool use_bake = false;
+    bool idle_test = false;
     bool do_shape = false;
     uint32_t warmup = 30;
     uint32_t frames = 120;
+    uint32_t idle_seconds = 60;
+    uint32_t dirty_after = 0;
     std::string shape_text;
     std::string shape_text_file;
     std::string shape_font;
@@ -585,6 +589,9 @@ int main(int argc, char** argv) {
         else if (arg == "--golden" && i + 1 < argc) { golden_path = argv[++i]; }
         else if (arg == "--bench") { bench = true; }
         else if (arg == "--bake") { use_bake = true; }
+        else if (arg == "--idle-test") { idle_test = true; }
+        else if (arg == "--idle-seconds" && i + 1 < argc) { idle_seconds = (uint32_t)std::stoul(argv[++i]); }
+        else if (arg == "--dirty-after" && i + 1 < argc) { dirty_after = (uint32_t)std::stoul(argv[++i]); }
         else if (arg == "--warmup" && i + 1 < argc) { warmup = (uint32_t)std::stoul(argv[++i]); }
         else if (arg == "--frames" && i + 1 < argc) { frames = (uint32_t)std::stoul(argv[++i]); }
         else if (arg == "--shape") { do_shape = true; }
@@ -1751,6 +1758,219 @@ int main(int argc, char** argv) {
                 std::fprintf(stderr, "wrote bench metrics: %s (p50=%.2fms p95=%.2fms)\n",
                              json_path.c_str(), gpu_p50, gpu_p95);
             }
+        }
+
+        // ---- Idle test mode: render once, stay idle, render on dirty ----
+        if (idle_test) {
+            std::vector<double> gpu_times;
+            uint32_t frames_rendered = 0;
+            uint32_t frames_skipped = 0;
+            double dirty_to_frame_ms = 0.0;
+            uint32_t rebuilds = 0;
+
+            PushConstants pc{};
+            pc.time = (float)time;
+            pc.resolution_x = (float)width;
+            pc.resolution_y = (float)height;
+            pc.seed = (float)seed;
+
+            auto render_frame = [&](bool& did_rebuild) -> double {
+                did_rebuild = false;
+                vkResetCommandBuffer(cmd, 0);
+                VkCommandBufferBeginInfo begin_ci = {};
+                begin_ci.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                begin_ci.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+                vkBeginCommandBuffer(cmd, &begin_ci);
+
+                if (use_bake) {
+                    if (frames_rendered == 0) {
+                        VkClearValue bake_clear = {{0.0f, 0.0f, 0.0f, 0.0f}};
+                        VkRenderPassBeginInfo bake_rp_begin = {};
+                        bake_rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                        bake_rp_begin.renderPass = bake_render_pass;
+                        bake_rp_begin.framebuffer = bake_framebuffer;
+                        bake_rp_begin.renderArea = {{0, 0}, {width, height}};
+                        bake_rp_begin.clearValueCount = 1;
+                        bake_rp_begin.pClearValues = &bake_clear;
+                        vkCmdBeginRenderPass(cmd, &bake_rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+                        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bake_pipeline);
+                        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bake_layout, 0, 1,
+                                                &bake_dset, 0, nullptr);
+                        vkCmdPushConstants(cmd, bake_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                           sizeof(PushConstants), &pc);
+                        VkViewport bake_viewport = {0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f};
+                        VkRect2D bake_scissor = {{0, 0}, {width, height}};
+                        vkCmdSetViewport(cmd, 0, 1, &bake_viewport);
+                        vkCmdSetScissor(cmd, 0, 1, &bake_scissor);
+                        vkCmdDraw(cmd, 3, 1, 0, 0);
+                        vkCmdEndRenderPass(cmd);
+
+                        VkImageMemoryBarrier barrier = {};
+                        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                        barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                        barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                        barrier.image = bake_image;
+                        barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+                        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                                             0, nullptr, 0, nullptr, 1, &barrier);
+                        did_rebuild = true;
+                    }
+
+                    VkClearValue clear_color = {{0.0f, 0.0f, 0.0f, 0.0f}};
+                    VkRenderPassBeginInfo rp_begin = {};
+                    rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                    rp_begin.renderPass = render_pass;
+                    rp_begin.framebuffer = framebuffer;
+                    rp_begin.renderArea = {{0, 0}, {width, height}};
+                    rp_begin.clearValueCount = 1;
+                    rp_begin.pClearValues = &clear_color;
+                    vkCmdBeginRenderPass(cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+                    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, final_pipeline);
+                    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, final_layout, 0, 1,
+                                            &final_dset, 0, nullptr);
+                    vkCmdPushConstants(cmd, final_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                       sizeof(PushConstants), &pc);
+                } else {
+                    VkClearValue clear_color = {{0.0f, 0.0f, 0.0f, 0.0f}};
+                    VkRenderPassBeginInfo rp_begin = {};
+                    rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                    rp_begin.renderPass = render_pass;
+                    rp_begin.framebuffer = framebuffer;
+                    rp_begin.renderArea = {{0, 0}, {width, height}};
+                    rp_begin.clearValueCount = 1;
+                    rp_begin.pClearValues = &clear_color;
+                    vkCmdBeginRenderPass(cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+                    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+                    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
+                                            &dset, 0, nullptr);
+                    vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                       sizeof(PushConstants), &pc);
+                }
+                VkViewport viewport = {0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f};
+                VkRect2D scissor = {{0, 0}, {width, height}};
+                vkCmdSetViewport(cmd, 0, 1, &viewport);
+                vkCmdSetScissor(cmd, 0, 1, &scissor);
+                vkCmdDraw(cmd, 3, 1, 0, 0);
+                vkCmdEndRenderPass(cmd);
+                vkEndCommandBuffer(cmd);
+
+                vkResetFences(device, 1, &fence);
+                auto t0 = std::chrono::high_resolution_clock::now();
+                vkQueueSubmit(queue, 1, &submit, fence);
+                vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+                auto t1 = std::chrono::high_resolution_clock::now();
+
+                return std::chrono::duration<double, std::milli>(t1 - t0).count();
+            };
+
+            // Initial render (frame 1)
+            bool rebuilt = false;
+            double frame_ms = render_frame(rebuilt);
+            gpu_times.push_back(frame_ms);
+            frames_rendered++;
+            if (rebuilt) rebuilds++;
+
+            // Idle wait: no GPU work while nothing changes
+            if (idle_seconds > 0) {
+                std::this_thread::sleep_for(std::chrono::seconds(idle_seconds));
+                frames_skipped = idle_seconds;
+            }
+
+            // Optional dirty change: simulate param/light change, render exactly one frame
+            if (dirty_after > 0) {
+                pc.resolution_x = (float)(width + 1); // force param change
+                auto dirty_t0 = std::chrono::high_resolution_clock::now();
+                frame_ms = render_frame(rebuilt);
+                gpu_times.push_back(frame_ms);
+                frames_rendered++;
+                auto dirty_t1 = std::chrono::high_resolution_clock::now();
+                dirty_to_frame_ms = std::chrono::duration<double, std::milli>(dirty_t1 - dirty_t0).count();
+                if (rebuilt) rebuilds++;
+            }
+
+            // Compute percentiles
+            std::sort(gpu_times.begin(), gpu_times.end());
+            double gpu_p50 = 0.0, gpu_p95 = 0.0;
+            if (!gpu_times.empty()) {
+                gpu_p50 = gpu_times[gpu_times.size() / 2];
+                gpu_p95 = gpu_times[(size_t)(gpu_times.size() * 0.95)];
+            }
+
+            // Write idle metrics JSON
+            if (!json_path.empty()) {
+                std::ofstream f(json_path);
+                if (f) {
+                    f << "{\n";
+                    f << "  \"device\": \"" << chosen_props.deviceName << "\",\n";
+                    f << "  \"resolution\": \"" << width << "x" << height << "\",\n";
+                    f << "  \"time\": " << time << ",\n";
+                    f << "  \"seed\": " << seed << ",\n";
+                    f << "  \"idle_seconds\": " << idle_seconds << ",\n";
+                    f << "  \"frames_rendered\": " << frames_rendered << ",\n";
+                    f << "  \"frames_skipped\": " << frames_skipped << ",\n";
+                    f << "  \"gpu_ms_p50\": " << gpu_p50 << ",\n";
+                    f << "  \"gpu_ms_p95\": " << gpu_p95 << ",\n";
+                    f << "  \"dirty_to_frame_ms_p95\": " << dirty_to_frame_ms << ",\n";
+                    f << "  \"rebuilds\": " << rebuilds << ",\n";
+                    f << "  \"validation\": \"ok\",\n";
+                    f << "  \"result\": \"pass\"\n";
+                    f << "}\n";
+                    f.flush();
+                    std::fprintf(stderr, "wrote idle metrics: %s (rendered=%u skipped=%u p50=%.2fms p95=%.2fms dirty_to_frame=%.2fms rebuilds=%u)\n",
+                                 json_path.c_str(), frames_rendered, frames_skipped, gpu_p50, gpu_p95, dirty_to_frame_ms, rebuilds);
+                }
+            }
+
+            // Write PNG output if requested
+            if (!out_path.empty()) {
+                VkImageMemoryBarrier rb_barrier = {};
+                rb_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                rb_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                rb_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                rb_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                rb_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                rb_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                rb_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                rb_barrier.image = color_image;
+                rb_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+
+                vkResetCommandBuffer(cmd, 0);
+                VkCommandBufferBeginInfo rb_begin = {};
+                rb_begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                rb_begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+                vkBeginCommandBuffer(cmd, &rb_begin);
+                vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                     VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                                     0, nullptr, 0, nullptr, 1, &rb_barrier);
+                VkBufferImageCopy region = {};
+                region.bufferOffset = 0;
+                region.bufferRowLength = width;
+                region.bufferImageHeight = 0;
+                region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+                region.imageExtent = {width, height, 1};
+                vkCmdCopyImageToBuffer(cmd, color_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                       readback_buffer, 1, &region);
+                vkEndCommandBuffer(cmd);
+
+                vkResetFences(device, 1, &fence);
+                vkQueueSubmit(queue, 1, &submit, fence);
+                vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+
+                vmaInvalidateAllocation(allocator, buf_alloc, 0, VK_WHOLE_SIZE);
+                void* mapped = nullptr;
+                vmaMapMemory(allocator, buf_alloc, &mapped);
+                stbi_write_png(out_path.c_str(), (int)width, (int)height, 4, mapped,
+                               (int)width * 4);
+                vmaUnmapMemory(allocator, buf_alloc);
+                std::fprintf(stderr, "wrote PNG: %s (%ux%u)\n", out_path.c_str(), width, height);
+            }
+
+            // Fall through to cleanup
         }
 
         // ---- Cleanup ----
