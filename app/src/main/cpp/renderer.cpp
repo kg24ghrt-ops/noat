@@ -13,6 +13,7 @@
 #include "vert_spirv.inc"
 
 #include <android/log.h>
+#include <vulkan/vulkan_android.h>
 #include <cstring>
 #include <vector>
 

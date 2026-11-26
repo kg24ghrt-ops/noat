@@ -5,6 +5,7 @@
 
 #include <jni.h>
 
+#include <android/log.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 
@@ -17,7 +18,7 @@ namespace {
 
 // Host-side mirror of the GLSL 'Params' UBO (std140). Field order and types
 // must match shaders/paper_wear.frag and native/paper-headless/main.cpp exactly.
-struct ParamsMirror {
+struct alignas(16) ParamsMirror {
     float paper_size_mm_x = 215.9f;
     float paper_size_mm_y = 279.4f;
     float warmth = 0.45f;

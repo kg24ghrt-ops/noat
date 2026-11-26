@@ -23,7 +23,6 @@ public:
     bool init();
     // Create surface from ANativeWindow and build swapchain/render resources.
     bool createSurface(ANativeWindow* window);
-    // Recreate swapchain when surface size changes.
     bool resize(uint32_t width, uint32_t height);
     // Render one frame and present.
     bool renderFrame();
@@ -42,8 +41,8 @@ private:
     bool selectPhysicalDevice();
     bool createDevice();
     bool createAllocator();
+    bool createRenderResourcesOnce();
     bool createSwapchain();
-    bool createRenderResources();
     bool createSyncObjects();
     void destroySwapchain();
     void destroyRenderResources();
@@ -62,11 +61,6 @@ private:
     std::vector<VkImageView> m_swapchainImageViews;
     std::vector<VkFramebuffer> m_swapchainFramebuffers;
     VmaAllocator m_allocator{VK_NULL_HANDLE};
-
-    // Offscreen render target (same as headless: color attachment only).
-    VkImage m_colorImage{VK_NULL_HANDLE};
-    VmaAllocation m_colorAlloc{VK_NULL_HANDLE};
-    VkImageView m_colorView{VK_NULL_HANDLE};
 
     VkRenderPass m_renderPass{VK_NULL_HANDLE};
     VkPipeline m_pipeline{VK_NULL_HANDLE};
