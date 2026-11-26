@@ -1040,6 +1040,7 @@ int main(int argc, char** argv) {
     submit.pCommandBuffers = &cmd;
 
     if (bench) {
+        std::fprintf(stderr, "bench: starting warmup+frames=%u+%u\n", warmup, frames);
         std::vector<double> gpu_times;
         gpu_times.reserve(frames);
         std::vector<uint64_t> timestamps(frames * 2);
@@ -1084,6 +1085,7 @@ int main(int argc, char** argv) {
             vkQueueSubmit(queue, 1, &submit, fence);
             vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
         }
+        std::fprintf(stderr, "bench: warmup done\n");
 
         // Timed frames
         for (uint32_t f = 0; f < frames; ++f) {
@@ -1123,10 +1125,12 @@ int main(int argc, char** argv) {
             vkQueueSubmit(queue, 1, &submit, fence);
             vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
         }
+        std::fprintf(stderr, "bench: timed done\n");
 
         vkGetQueryPoolResults(device, timestamp_pool, 0, frames * 2,
                               timestamps.size() * sizeof(uint64_t), timestamps.data(),
                               sizeof(uint64_t), VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+        std::fprintf(stderr, "bench: query results retrieved\n");
 
         for (uint32_t f = 0; f < frames; ++f) {
             uint64_t start = timestamps[f * 2];
