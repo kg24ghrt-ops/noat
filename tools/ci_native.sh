@@ -21,6 +21,24 @@ if [ -z "$NDK" ] || [ ! -d "$NDK" ]; then
 fi
 echo "[ci_native] NDK: $NDK"
 
+# ---- Build HarfBuzz for Android arm64 + host ----
+echo "[ci_native] building HarfBuzz"
+bash "$REPO_ROOT/tools/ci_harfbuzz.sh"
+
+# Fetch pinned font assets in CI only (used for shaping + SDF atlas goldens).
+bash "$REPO_ROOT/tools/ci_fonts.sh"
+
+HARFBUZZ_DIR="$REPO_ROOT/ci-out/harfbuzz"
+HARFBUZZ_ANDROID_LIB="$HARFBUZZ_DIR/libharfbuzz-android-arm64.a"
+HARFBUZZ_HOST_LIB="$HARFBUZZ_DIR/libharfbuzz-host.a"
+HARFBUZZ_INCLUDE="$HARFBUZZ_DIR/harfbuzz-8.4.0/src"
+
+if [ ! -f "$HARFBUZZ_ANDROID_LIB" ]; then
+  echo "[ci_native] ERROR: Android HarfBuzz library not found at $HARFBUZZ_ANDROID_LIB" >&2
+  exit 1
+fi
+echo "[ci_native] HarfBuzz Android lib: $HARFBUZZ_ANDROID_LIB"
+
 # ---- Android arm64 build ----
 ANDROID_DIR="$OUT_DIR/android"
 rm -rf "$ANDROID_DIR"
@@ -38,6 +56,8 @@ cmake -S native/paper-headless -B "$ANDROID_DIR/build" \
   -DCMAKE_CXX_FLAGS_RELEASE="-O2" \
   -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-s" \
   -DNOAT_VULKAN_SDK="" \
+  -DHARFBUZZ_INCLUDE_DIR="$HARFBUZZ_INCLUDE" \
+  -DHARFBUZZ_LIBRARY="$HARFBUZZ_ANDROID_LIB" \
   2>&1 | tail -n 20
 
 echo "[ci_native] building Android headless"
