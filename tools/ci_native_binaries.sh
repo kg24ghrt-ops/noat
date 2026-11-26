@@ -18,6 +18,12 @@ if [ -z "$NDK" ] || [ ! -d "$NDK" ]; then
 fi
 echo "[ci_native_binaries] NDK: $NDK"
 
+TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake"
+if [ ! -f "$TOOLCHAIN_FILE" ]; then
+  echo "[ci_native_binaries] ERROR: NDK toolchain file not found at $TOOLCHAIN_FILE" >&2
+  exit 1
+fi
+
 # Source commit for provenance.
 SOURCE_COMMIT="$(git rev-parse HEAD)"
 echo "[ci_native_binaries] Source commit: $SOURCE_COMMIT"
@@ -41,11 +47,9 @@ for ABI in arm64-v8a x86_64; do
   mkdir -p "$BUILD_DIR"
 
   cmake -S app/src/main/cpp -B "$BUILD_DIR/build" \
-    -DCMAKE_SYSTEM_NAME=Android \
-    -DCMAKE_SYSTEM_VERSION=31 \
+    -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
     -DANDROID_ABI="$ABI" \
     -DANDROID_PLATFORM=android-31 \
-    -DANDROID_NDK="$NDK" \
     -DANDROID_STL=c++_static \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_CXX_FLAGS_RELEASE="-O2 -DNDEBUG" \
@@ -53,7 +57,7 @@ for ABI in arm64-v8a x86_64; do
     -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
     -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
     -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
-    2>&1 | tail -n 20
+    2>&1 | tail -n 30
 
   cmake --build "$BUILD_DIR/build" --config Release -j"$(nproc)"
 
