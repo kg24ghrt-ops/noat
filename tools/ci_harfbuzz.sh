@@ -39,6 +39,10 @@ if [ ! -d "$HARFBUZZ_DIR" ]; then
   fi
 
   tar -xf "$HARFBUZZ_TARBALL" -C "$OUT_DIR"
+  echo "[ci_harfbuzz] extracted contents:"
+  find "$OUT_DIR" -maxdepth 2 -type d 2>/dev/null | sort
+  echo "[ci_harfbuzz] meson.build locations:"
+  find "$OUT_DIR" -maxdepth 4 -name meson.build 2>/dev/null
 fi
 
 # Verify meson.build exists in the expected source directory.
