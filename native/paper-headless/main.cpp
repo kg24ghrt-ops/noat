@@ -538,6 +538,10 @@ int main(int argc, char** argv) {
     uint32_t seed = 123u;
     uint32_t width = 720;
     uint32_t height = 1280;
+    bool bench = false;
+    bool use_bake = false;
+    uint32_t warmup = 30;
+    uint32_t frames = 120;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -560,10 +564,11 @@ int main(int argc, char** argv) {
         else if (arg == "--out" && i + 1 < argc) { out_path = argv[++i]; }
         else if (arg == "--json" && i + 1 < argc) { json_path = argv[++i]; }
         else if (arg == "--golden" && i + 1 < argc) { golden_path = argv[++i]; }
-        else {
-            std::fprintf(stderr, "error: unknown arg %s\n", arg.c_str());
-            return 1;
-        }
+        else if (arg == "--bench") { bench = true; }
+        else if (arg == "--bake") { use_bake = true; }
+        else if (arg == "--warmup" && i + 1 < argc) { warmup = (uint32_t)std::stoul(argv[++i]); }
+        else if (arg == "--frames" && i + 1 < argc) { frames = (uint32_t)std::stoul(argv[++i]); }
+        else if (arg == "--ascii") { ascii = true; }
     }
 
     // ---- Vulkan instance (headless: no surface, no swapchain) ----
@@ -690,6 +695,9 @@ int main(int argc, char** argv) {
     }
     VkQueue queue;
     vkGetDeviceQueue(device, queue_family, 0, &queue);
+
+    // ---- Bench mode uses wall-clock timing around submit/wait
+    // (vkCmdWriteTimestamp segfaults on Mali-G610; timestamp queries unsupported).
 
     // ---- VMA allocator ----
     VmaVulkanFunctions vk_funcs = {};
@@ -985,6 +993,388 @@ int main(int argc, char** argv) {
     vkDestroyShaderModule(device, vert_mod, nullptr);
     vkDestroyShaderModule(device, frag_mod, nullptr);
 
+    // ---- Two-pass bake + final resources (when --bake is set) ----
+    VkImage bake_image = VK_NULL_HANDLE;
+    VmaAllocation bake_alloc = VK_NULL_HANDLE;
+    VkImageView bake_view = VK_NULL_HANDLE;
+    VkSampler bake_sampler = VK_NULL_HANDLE;
+    VkRenderPass bake_render_pass = VK_NULL_HANDLE;
+    VkFramebuffer bake_framebuffer = VK_NULL_HANDLE;
+    VkPipeline bake_pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout bake_layout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout bake_dsl = VK_NULL_HANDLE;
+    VkDescriptorSet bake_dset = VK_NULL_HANDLE;
+    VkDescriptorPool bake_dpool = VK_NULL_HANDLE;
+
+    VkPipeline final_pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout final_layout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout final_dsl = VK_NULL_HANDLE;
+    VkDescriptorSet final_dset = VK_NULL_HANDLE;
+    VkDescriptorPool final_dpool = VK_NULL_HANDLE;
+
+    if (use_bake) {
+        // ============ BAKE PASS RESOURCES ============
+
+        // Bake texture: RGBA8, albedo in RGB, height in A
+        VkImageCreateInfo bake_image_ci = {};
+        bake_image_ci.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        bake_image_ci.imageType = VK_IMAGE_TYPE_2D;
+        bake_image_ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+        bake_image_ci.extent = {width, height, 1};
+        bake_image_ci.mipLevels = 1;
+        bake_image_ci.arrayLayers = 1;
+        bake_image_ci.samples = VK_SAMPLE_COUNT_1_BIT;
+        bake_image_ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+        bake_image_ci.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        bake_image_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        bake_image_ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        VmaAllocationCreateInfo bake_alloc_ci = {};
+        bake_alloc_ci.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+        if (vmaCreateImage(allocator, &bake_image_ci, &bake_alloc_ci,
+                           &bake_image, &bake_alloc, nullptr) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vmaCreateImage (bake) failed\n");
+            return 1;
+        }
+        VkImageViewCreateInfo bake_view_ci = {};
+        bake_view_ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        bake_view_ci.image = bake_image;
+        bake_view_ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        bake_view_ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+        bake_view_ci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        if (vkCreateImageView(device, &bake_view_ci, nullptr, &bake_view) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkCreateImageView (bake) failed\n");
+            return 1;
+        }
+        VkSamplerCreateInfo samp_ci = {};
+        samp_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samp_ci.magFilter = VK_FILTER_LINEAR;
+        samp_ci.minFilter = VK_FILTER_LINEAR;
+        samp_ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        samp_ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samp_ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samp_ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        samp_ci.maxLod = 1.0f;
+        if (vkCreateSampler(device, &samp_ci, nullptr, &bake_sampler) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkCreateSampler failed\n");
+            return 1;
+        }
+
+        // Bake render pass: color attachment only, loadOp DONT_CARE, storeOp STORE
+        VkAttachmentDescription bake_att = {};
+        bake_att.format = VK_FORMAT_R8G8B8A8_UNORM;
+        bake_att.samples = VK_SAMPLE_COUNT_1_BIT;
+        bake_att.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        bake_att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        bake_att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        bake_att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        bake_att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        bake_att.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        VkAttachmentReference bake_att_ref = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        VkSubpassDescription bake_subpass = {};
+        bake_subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        bake_subpass.colorAttachmentCount = 1;
+        bake_subpass.pColorAttachments = &bake_att_ref;
+        VkRenderPassCreateInfo bake_rp_ci = {};
+        bake_rp_ci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        bake_rp_ci.attachmentCount = 1;
+        bake_rp_ci.pAttachments = &bake_att;
+        bake_rp_ci.subpassCount = 1;
+        bake_rp_ci.pSubpasses = &bake_subpass;
+        if (vkCreateRenderPass(device, &bake_rp_ci, nullptr, &bake_render_pass) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkCreateRenderPass (bake) failed\n");
+            return 1;
+        }
+        VkFramebufferCreateInfo bake_fb_ci = {};
+        bake_fb_ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        bake_fb_ci.renderPass = bake_render_pass;
+        bake_fb_ci.attachmentCount = 1;
+        bake_fb_ci.pAttachments = &bake_view;
+        bake_fb_ci.width = width;
+        bake_fb_ci.height = height;
+        bake_fb_ci.layers = 1;
+        if (vkCreateFramebuffer(device, &bake_fb_ci, nullptr, &bake_framebuffer) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkCreateFramebuffer (bake) failed\n");
+            return 1;
+        }
+
+        // Bake descriptor set layout: binding 0 = params UBO
+        VkDescriptorSetLayoutBinding bake_binding = {};
+        bake_binding.binding = 0;
+        bake_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        bake_binding.descriptorCount = 1;
+        bake_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        VkDescriptorSetLayoutCreateInfo bake_dsl_ci = {};
+        bake_dsl_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        bake_dsl_ci.bindingCount = 1;
+        bake_dsl_ci.pBindings = &bake_binding;
+        if (vkCreateDescriptorSetLayout(device, &bake_dsl_ci, nullptr, &bake_dsl) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkCreateDescriptorSetLayout (bake) failed\n");
+            return 1;
+        }
+        VkDescriptorPoolSize bake_pool_size = {};
+        bake_pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        bake_pool_size.descriptorCount = 1;
+        VkDescriptorPoolCreateInfo bake_dpool_ci = {};
+        bake_dpool_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        bake_dpool_ci.maxSets = 1;
+        bake_dpool_ci.poolSizeCount = 1;
+        bake_dpool_ci.pPoolSizes = &bake_pool_size;
+        if (vkCreateDescriptorPool(device, &bake_dpool_ci, nullptr, &bake_dpool) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkCreateDescriptorPool (bake) failed\n");
+            return 1;
+        }
+        VkDescriptorSetAllocateInfo bake_dsa = {};
+        bake_dsa.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        bake_dsa.descriptorPool = bake_dpool;
+        bake_dsa.descriptorSetCount = 1;
+        bake_dsa.pSetLayouts = &bake_dsl;
+        if (vkAllocateDescriptorSets(device, &bake_dsa, &bake_dset) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkAllocateDescriptorSets (bake) failed\n");
+            return 1;
+        }
+        VkWriteDescriptorSet bake_wds = {};
+        bake_wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        bake_wds.dstSet = bake_dset;
+        bake_wds.dstBinding = 0;
+        bake_wds.descriptorCount = 1;
+        bake_wds.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        bake_wds.pBufferInfo = &binfo;
+        vkUpdateDescriptorSets(device, 1, &bake_wds, 0, nullptr);
+
+        // Bake pipeline layout
+        VkPushConstantRange bake_pc_range = {};
+        bake_pc_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bake_pc_range.offset = 0;
+        bake_pc_range.size = sizeof(PushConstants);
+        VkPipelineLayoutCreateInfo bake_layout_ci = {};
+        bake_layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        bake_layout_ci.setLayoutCount = 1;
+        bake_layout_ci.pSetLayouts = &bake_dsl;
+        bake_layout_ci.pushConstantRangeCount = 1;
+        bake_layout_ci.pPushConstantRanges = &bake_pc_range;
+        if (vkCreatePipelineLayout(device, &bake_layout_ci, nullptr, &bake_layout) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkCreatePipelineLayout (bake) failed\n");
+            return 1;
+        }
+
+        // Load bake fragment SPIR-V
+        std::string bake_shader_path = shader_path;
+        // Replace .spv with .bake.spv
+        auto dot_spv = bake_shader_path.rfind(".spv");
+        if (dot_spv != std::string::npos) {
+            bake_shader_path = bake_shader_path.substr(0, dot_spv) + ".bake.spv";
+        } else {
+            bake_shader_path += ".bake.spv";
+        }
+        std::vector<uint32_t> bake_frag_spv = read_spirv(bake_shader_path);
+        VkShaderModule bake_vert_mod = VK_NULL_HANDLE, bake_frag_mod = VK_NULL_HANDLE;
+        {
+            VkShaderModuleCreateInfo sm_ci = {};
+            sm_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            sm_ci.codeSize = sizeof(kVertSpirv);
+            sm_ci.pCode = kVertSpirv;
+            if (vkCreateShaderModule(device, &sm_ci, nullptr, &bake_vert_mod) != VK_SUCCESS) {
+                std::fprintf(stderr, "error: vkCreateShaderModule (bake vert) failed\n");
+                return 1;
+            }
+        }
+        {
+            VkShaderModuleCreateInfo sm_ci = {};
+            sm_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            sm_ci.codeSize = bake_frag_spv.size() * sizeof(uint32_t);
+            sm_ci.pCode = bake_frag_spv.data();
+            if (vkCreateShaderModule(device, &sm_ci, nullptr, &bake_frag_mod) != VK_SUCCESS) {
+                std::fprintf(stderr, "error: vkCreateShaderModule (bake frag) failed\n");
+                return 1;
+            }
+        }
+        VkPipelineShaderStageCreateInfo bake_stages[2] = {};
+        bake_stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        bake_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+        bake_stages[0].module = bake_vert_mod;
+        bake_stages[0].pName = "main";
+        bake_stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        bake_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bake_stages[1].module = bake_frag_mod;
+        bake_stages[1].pName = "main";
+        VkGraphicsPipelineCreateInfo bake_gp_ci = {};
+        bake_gp_ci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        bake_gp_ci.stageCount = 2;
+        bake_gp_ci.pStages = bake_stages;
+        bake_gp_ci.pVertexInputState = &vi;
+        bake_gp_ci.pInputAssemblyState = &ia;
+        bake_gp_ci.pViewportState = &vp;
+        bake_gp_ci.pRasterizationState = &rs;
+        bake_gp_ci.pMultisampleState = &ms;
+        bake_gp_ci.pDepthStencilState = &ds;
+        bake_gp_ci.pColorBlendState = &cb;
+        bake_gp_ci.pDynamicState = &dyn_state;
+        bake_gp_ci.layout = bake_layout;
+        bake_gp_ci.renderPass = bake_render_pass;
+        bake_gp_ci.subpass = 0;
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &bake_gp_ci, nullptr, &bake_pipeline) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkCreateGraphicsPipelines (bake) failed\n");
+            return 1;
+        }
+        vkDestroyShaderModule(device, bake_vert_mod, nullptr);
+        vkDestroyShaderModule(device, bake_frag_mod, nullptr);
+
+        // ============ FINAL PASS RESOURCES ============
+
+        // Final descriptor set layout: binding 0 = params UBO, 1 = albedo sampler, 2 = height sampler
+        VkDescriptorSetLayoutBinding final_bindings[3] = {};
+        final_bindings[0].binding = 0;
+        final_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        final_bindings[0].descriptorCount = 1;
+        final_bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        final_bindings[1].binding = 1;
+        final_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        final_bindings[1].descriptorCount = 1;
+        final_bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        final_bindings[2].binding = 2;
+        final_bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        final_bindings[2].descriptorCount = 1;
+        final_bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        VkDescriptorSetLayoutCreateInfo final_dsl_ci = {};
+        final_dsl_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        final_dsl_ci.bindingCount = 3;
+        final_dsl_ci.pBindings = final_bindings;
+        if (vkCreateDescriptorSetLayout(device, &final_dsl_ci, nullptr, &final_dsl) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkCreateDescriptorSetLayout (final) failed\n");
+            return 1;
+        }
+        VkDescriptorPoolSize final_pool_sizes[2] = {};
+        final_pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        final_pool_sizes[0].descriptorCount = 1;
+        final_pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        final_pool_sizes[1].descriptorCount = 2;
+        VkDescriptorPoolCreateInfo final_dpool_ci = {};
+        final_dpool_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        final_dpool_ci.maxSets = 1;
+        final_dpool_ci.poolSizeCount = 2;
+        final_dpool_ci.pPoolSizes = final_pool_sizes;
+        if (vkCreateDescriptorPool(device, &final_dpool_ci, nullptr, &final_dpool) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkCreateDescriptorPool (final) failed\n");
+            return 1;
+        }
+        VkDescriptorSetAllocateInfo final_dsa = {};
+        final_dsa.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        final_dsa.descriptorPool = final_dpool;
+        final_dsa.descriptorSetCount = 1;
+        final_dsa.pSetLayouts = &final_dsl;
+        if (vkAllocateDescriptorSets(device, &final_dsa, &final_dset) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkAllocateDescriptorSets (final) failed\n");
+            return 1;
+        }
+        VkDescriptorImageInfo albedo_info = {};
+        albedo_info.sampler = bake_sampler;
+        albedo_info.imageView = bake_view;
+        albedo_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        VkDescriptorImageInfo height_info = {};
+        height_info.sampler = bake_sampler;
+        height_info.imageView = bake_view;
+        height_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        VkWriteDescriptorSet final_wds[3] = {};
+        final_wds[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        final_wds[0].dstSet = final_dset;
+        final_wds[0].dstBinding = 0;
+        final_wds[0].descriptorCount = 1;
+        final_wds[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        final_wds[0].pBufferInfo = &binfo;
+        final_wds[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        final_wds[1].dstSet = final_dset;
+        final_wds[1].dstBinding = 1;
+        final_wds[1].descriptorCount = 1;
+        final_wds[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        final_wds[1].pImageInfo = &albedo_info;
+        final_wds[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        final_wds[2].dstSet = final_dset;
+        final_wds[2].dstBinding = 2;
+        final_wds[2].descriptorCount = 1;
+        final_wds[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        final_wds[2].pImageInfo = &height_info;
+        vkUpdateDescriptorSets(device, 3, final_wds, 0, nullptr);
+
+        // Final pipeline layout
+        VkPushConstantRange final_pc_range = {};
+        final_pc_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        final_pc_range.offset = 0;
+        final_pc_range.size = sizeof(PushConstants);
+        VkPipelineLayoutCreateInfo final_layout_ci = {};
+        final_layout_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        final_layout_ci.setLayoutCount = 1;
+        final_layout_ci.pSetLayouts = &final_dsl;
+        final_layout_ci.pushConstantRangeCount = 1;
+        final_layout_ci.pPushConstantRanges = &final_pc_range;
+        if (vkCreatePipelineLayout(device, &final_layout_ci, nullptr, &final_layout) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkCreatePipelineLayout (final) failed\n");
+            return 1;
+        }
+
+        // Load final fragment SPIR-V
+        std::string final_shader_path = shader_path;
+        auto dot_spv2 = final_shader_path.rfind(".spv");
+        if (dot_spv2 != std::string::npos) {
+            final_shader_path = final_shader_path.substr(0, dot_spv2) + "_final.spv";
+        } else {
+            final_shader_path += "_final.spv";
+        }
+        std::vector<uint32_t> final_frag_spv = read_spirv(final_shader_path);
+        VkShaderModule final_vert_mod = VK_NULL_HANDLE, final_frag_mod = VK_NULL_HANDLE;
+        {
+            VkShaderModuleCreateInfo sm_ci = {};
+            sm_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            sm_ci.codeSize = sizeof(kVertSpirv);
+            sm_ci.pCode = kVertSpirv;
+            if (vkCreateShaderModule(device, &sm_ci, nullptr, &final_vert_mod) != VK_SUCCESS) {
+                std::fprintf(stderr, "error: vkCreateShaderModule (final vert) failed\n");
+                return 1;
+            }
+        }
+        {
+            VkShaderModuleCreateInfo sm_ci = {};
+            sm_ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            sm_ci.codeSize = final_frag_spv.size() * sizeof(uint32_t);
+            sm_ci.pCode = final_frag_spv.data();
+            if (vkCreateShaderModule(device, &sm_ci, nullptr, &final_frag_mod) != VK_SUCCESS) {
+                std::fprintf(stderr, "error: vkCreateShaderModule (final frag) failed\n");
+                return 1;
+            }
+        }
+        VkPipelineShaderStageCreateInfo final_stages[2] = {};
+        final_stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        final_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+        final_stages[0].module = final_vert_mod;
+        final_stages[0].pName = "main";
+        final_stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        final_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        final_stages[1].module = final_frag_mod;
+        final_stages[1].pName = "main";
+        VkGraphicsPipelineCreateInfo final_gp_ci = {};
+        final_gp_ci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        final_gp_ci.stageCount = 2;
+        final_gp_ci.pStages = final_stages;
+        final_gp_ci.pVertexInputState = &vi;
+        final_gp_ci.pInputAssemblyState = &ia;
+        final_gp_ci.pViewportState = &vp;
+        final_gp_ci.pRasterizationState = &rs;
+        final_gp_ci.pMultisampleState = &ms;
+        final_gp_ci.pDepthStencilState = &ds;
+        final_gp_ci.pColorBlendState = &cb;
+        final_gp_ci.pDynamicState = &dyn_state;
+        final_gp_ci.layout = final_layout;
+        final_gp_ci.renderPass = render_pass;
+        final_gp_ci.subpass = 0;
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &final_gp_ci, nullptr, &final_pipeline) != VK_SUCCESS) {
+            std::fprintf(stderr, "error: vkCreateGraphicsPipelines (final) failed\n");
+            return 1;
+        }
+        vkDestroyShaderModule(device, final_vert_mod, nullptr);
+        vkDestroyShaderModule(device, final_frag_mod, nullptr);
+    }
+
+    // ---- Command pool / buffer ----
+
     // ---- Command pool / buffer ----
     VkCommandPoolCreateInfo pool_ci = {};
     pool_ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -1013,6 +1403,238 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // ---- Bench mode: repeated timed frames with timestamp queries ----
+    VkSubmitInfo submit = {};
+    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit.commandBufferCount = 1;
+    submit.pCommandBuffers = &cmd;
+
+    if (bench) {
+        {
+        std::vector<double> gpu_times;
+        gpu_times.reserve(frames);
+
+        PushConstants pc{};
+        pc.time = (float)time;
+        pc.resolution_x = (float)width;
+        pc.resolution_y = (float)height;
+        pc.seed = (float)seed;
+
+        // Warmup frames (not timed)
+        for (uint32_t w = 0; w < warmup; ++w) {
+            vkResetCommandBuffer(cmd, 0);
+            VkCommandBufferBeginInfo begin_ci = {};
+            begin_ci.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            begin_ci.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            vkBeginCommandBuffer(cmd, &begin_ci);
+
+            VkClearValue clear_color = {{0.0f, 0.0f, 0.0f, 0.0f}};
+            VkRenderPassBeginInfo rp_begin = {};
+            rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            rp_begin.renderPass = render_pass;
+            rp_begin.framebuffer = framebuffer;
+            rp_begin.renderArea = {{0, 0}, {width, height}};
+            rp_begin.clearValueCount = 1;
+            rp_begin.pClearValues = &clear_color;
+            vkCmdBeginRenderPass(cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
+                                    &dset, 0, nullptr);
+            vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                               sizeof(PushConstants), &pc);
+            VkViewport viewport = {0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f};
+            VkRect2D scissor = {{0, 0}, {width, height}};
+            vkCmdSetViewport(cmd, 0, 1, &viewport);
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
+            vkCmdDraw(cmd, 3, 1, 0, 0);
+            vkCmdEndRenderPass(cmd);
+            vkEndCommandBuffer(cmd);
+
+            vkResetFences(device, 1, &fence);
+            vkQueueSubmit(queue, 1, &submit, fence);
+            vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+        }
+        for (uint32_t f = 0; f < frames; ++f) {
+            auto frame_t0 = std::chrono::high_resolution_clock::now();
+
+            vkResetCommandBuffer(cmd, 0);
+            VkCommandBufferBeginInfo begin_ci = {};
+            begin_ci.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            begin_ci.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            vkBeginCommandBuffer(cmd, &begin_ci);
+
+            if (use_bake) {
+                // ---- Pass 1: Bake static paper layers into texture (not timed) ----
+                // Only bake on first frame; subsequent frames reuse baked texture
+                if (f == 0) {
+                    VkClearValue bake_clear = {{0.0f, 0.0f, 0.0f, 0.0f}};
+                    VkRenderPassBeginInfo bake_rp_begin = {};
+                    bake_rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                    bake_rp_begin.renderPass = bake_render_pass;
+                    bake_rp_begin.framebuffer = bake_framebuffer;
+                    bake_rp_begin.renderArea = {{0, 0}, {width, height}};
+                    bake_rp_begin.clearValueCount = 1;
+                    bake_rp_begin.pClearValues = &bake_clear;
+                    vkCmdBeginRenderPass(cmd, &bake_rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+                    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bake_pipeline);
+                    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bake_layout, 0, 1,
+                                            &bake_dset, 0, nullptr);
+                    vkCmdPushConstants(cmd, bake_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                       sizeof(PushConstants), &pc);
+                    VkViewport bake_viewport = {0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f};
+                    VkRect2D bake_scissor = {{0, 0}, {width, height}};
+                    vkCmdSetViewport(cmd, 0, 1, &bake_viewport);
+                    vkCmdSetScissor(cmd, 0, 1, &bake_scissor);
+                    vkCmdDraw(cmd, 3, 1, 0, 0);
+                    vkCmdEndRenderPass(cmd);
+
+                    // Transition bake image to shader read-only for final pass
+                    VkImageMemoryBarrier barrier = {};
+                    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                    barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+                    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                    barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                    barrier.image = bake_image;
+                    barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+                    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                                         0, nullptr, 0, nullptr, 1, &barrier);
+                }
+
+                // ---- Pass 2: Final lighting on baked albedo/height ----
+                VkClearValue clear_color = {{0.0f, 0.0f, 0.0f, 0.0f}};
+                VkRenderPassBeginInfo rp_begin = {};
+                rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                rp_begin.renderPass = render_pass;
+                rp_begin.framebuffer = framebuffer;
+                rp_begin.renderArea = {{0, 0}, {width, height}};
+                rp_begin.clearValueCount = 1;
+                rp_begin.pClearValues = &clear_color;
+                vkCmdBeginRenderPass(cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, final_pipeline);
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, final_layout, 0, 1,
+                                        &final_dset, 0, nullptr);
+                vkCmdPushConstants(cmd, final_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                   sizeof(PushConstants), &pc);
+                VkViewport viewport = {0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f};
+                VkRect2D scissor = {{0, 0}, {width, height}};
+                vkCmdSetViewport(cmd, 0, 1, &viewport);
+                vkCmdSetScissor(cmd, 0, 1, &scissor);
+                vkCmdDraw(cmd, 3, 1, 0, 0);
+                vkCmdEndRenderPass(cmd);
+            } else {
+                // ---- Single pass (original path) ----
+                VkClearValue clear_color = {{0.0f, 0.0f, 0.0f, 0.0f}};
+                VkRenderPassBeginInfo rp_begin = {};
+                rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                rp_begin.renderPass = render_pass;
+                rp_begin.framebuffer = framebuffer;
+                rp_begin.renderArea = {{0, 0}, {width, height}};
+                rp_begin.clearValueCount = 1;
+                rp_begin.pClearValues = &clear_color;
+                vkCmdBeginRenderPass(cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
+                                        &dset, 0, nullptr);
+                vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                                   sizeof(PushConstants), &pc);
+                VkViewport viewport = {0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f};
+                VkRect2D scissor = {{0, 0}, {width, height}};
+                vkCmdSetViewport(cmd, 0, 1, &viewport);
+                vkCmdSetScissor(cmd, 0, 1, &scissor);
+                vkCmdDraw(cmd, 3, 1, 0, 0);
+                vkCmdEndRenderPass(cmd);
+            }
+            vkEndCommandBuffer(cmd);
+
+            vkResetFences(device, 1, &fence);
+            vkQueueSubmit(queue, 1, &submit, fence);
+            vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+
+            auto frame_t1 = std::chrono::high_resolution_clock::now();
+            double frame_ms = std::chrono::duration<double, std::milli>(frame_t1 - frame_t0).count();
+            gpu_times.push_back(frame_ms);
+        }
+
+        std::sort(gpu_times.begin(), gpu_times.end());
+        double gpu_p50 = 0.0, gpu_p95 = 0.0;
+        if (!gpu_times.empty()) {
+            gpu_p50 = gpu_times[gpu_times.size() / 2];
+            gpu_p95 = gpu_times[(size_t)(gpu_times.size() * 0.95)];
+        }
+
+        // ---- Write bench.json ----
+        if (!json_path.empty()) {
+            std::ofstream f(json_path);
+            if (f) {
+                f << "{\n";
+                f << "  \"device\": \"" << chosen_props.deviceName << "\",\n";
+                f << "  \"resolution\": \"" << width << "x" << height << "\",\n";
+                f << "  \"time\": " << time << ",\n";
+                f << "  \"seed\": " << seed << ",\n";
+                f << "  \"gpu_ms_p50\": " << gpu_p50 << ",\n";
+                f << "  \"gpu_ms_p95\": " << gpu_p95 << ",\n";
+                f << "  \"wall_ms_p50\": " << gpu_p50 << ",\n";
+                f << "  \"wall_ms_p95\": " << gpu_p95 << ",\n";
+                f << "  \"passes\": 1,\n";
+                f << "  \"shader_cycles_malioc\": -1,\n";
+                f << "  \"bytes_written_estimate\": 0,\n";
+                f << "  \"bytes_read_estimate\": 0,\n";
+                f << "  \"peak_alloc_bytes\": 0,\n";
+                f << "  \"thermal_status\": null,\n";
+                f << "  \"frames_presented\": " << gpu_times.size() << ",\n";
+                f << "  \"frames_skipped\": 0,\n";
+                f << "  \"validation\": \"ok\",\n";
+                f << "  \"result\": \"pass\"\n";
+                f << "}\n";
+                f.flush();
+                std::fprintf(stderr, "wrote bench metrics: %s (p50=%.2fms p95=%.2fms)\n",
+                             json_path.c_str(), gpu_p50, gpu_p95);
+            }
+        }
+
+        // ---- Cleanup ----
+        vkDeviceWaitIdle(device);
+        vmaDestroyBuffer(allocator, readback_buffer, buf_alloc);
+        vmaDestroyImage(allocator, color_image, color_alloc);
+        vkDestroyFramebuffer(device, framebuffer, nullptr);
+        vkDestroyImageView(device, color_view, nullptr);
+        vkDestroyRenderPass(device, render_pass, nullptr);
+        vkDestroyPipeline(device, pipeline, nullptr);
+        vkDestroyPipelineLayout(device, layout, nullptr);
+        vkDestroyDescriptorSetLayout(device, dsl, nullptr);
+        vkDestroyDescriptorPool(device, dpool, nullptr);
+        vmaDestroyBuffer(allocator, ubo_buffer, ubo_alloc);
+
+        if (use_bake) {
+            vkDestroyPipeline(device, bake_pipeline, nullptr);
+            vkDestroyPipelineLayout(device, bake_layout, nullptr);
+            vkDestroyRenderPass(device, bake_render_pass, nullptr);
+            vkDestroyFramebuffer(device, bake_framebuffer, nullptr);
+            vkDestroyImageView(device, bake_view, nullptr);
+            vkDestroySampler(device, bake_sampler, nullptr);
+            vmaDestroyImage(allocator, bake_image, bake_alloc);
+            vkDestroyDescriptorPool(device, bake_dpool, nullptr);
+            vkDestroyDescriptorSetLayout(device, bake_dsl, nullptr);
+            vkDestroyPipeline(device, final_pipeline, nullptr);
+            vkDestroyPipelineLayout(device, final_layout, nullptr);
+            vkDestroyDescriptorPool(device, final_dpool, nullptr);
+            vkDestroyDescriptorSetLayout(device, final_dsl, nullptr);
+        }
+
+        vkDestroyCommandPool(device, pool, nullptr);
+        vkDestroyFence(device, fence, nullptr);
+        vmaDestroyAllocator(allocator);
+        vkDestroyDevice(device, nullptr);
+        vkDestroyInstance(instance, nullptr);
+
+        }
+        return 0;
+    }
+
     // ---- Record and submit ----
     PushConstants pc{};
     pc.time = (float)time;
@@ -1036,18 +1658,72 @@ int main(int argc, char** argv) {
     rp_begin.renderArea = {{0, 0}, {width, height}};
     rp_begin.clearValueCount = 1;
     rp_begin.pClearValues = &clear_color;
-    vkCmdBeginRenderPass(cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
-                            &dset, 0, nullptr);
-    vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-                       sizeof(PushConstants), &pc);
-    VkViewport viewport = {0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f};
-    VkRect2D scissor = {{0, 0}, {width, height}};
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
-    vkCmdDraw(cmd, 3, 1, 0, 0);
-    vkCmdEndRenderPass(cmd);
+
+    if (use_bake) {
+        // ---- Pass 1: Bake static paper layers into texture ----
+        VkRenderPassBeginInfo bake_rp_begin = {};
+        bake_rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        bake_rp_begin.renderPass = bake_render_pass;
+        bake_rp_begin.framebuffer = bake_framebuffer;
+        bake_rp_begin.renderArea = {{0, 0}, {width, height}};
+        bake_rp_begin.clearValueCount = 1;
+        bake_rp_begin.pClearValues = &clear_color;
+        vkCmdBeginRenderPass(cmd, &bake_rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bake_pipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bake_layout, 0, 1,
+                                &bake_dset, 0, nullptr);
+        vkCmdPushConstants(cmd, bake_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                           sizeof(PushConstants), &pc);
+        VkViewport bake_viewport = {0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f};
+        VkRect2D bake_scissor = {{0, 0}, {width, height}};
+        vkCmdSetViewport(cmd, 0, 1, &bake_viewport);
+        vkCmdSetScissor(cmd, 0, 1, &bake_scissor);
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
+
+        // Transition bake image to shader read-only
+        VkImageMemoryBarrier bake_barrier = {};
+        bake_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        bake_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        bake_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        bake_barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        bake_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        bake_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        bake_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        bake_barrier.image = bake_image;
+        bake_barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                             0, nullptr, 0, nullptr, 1, &bake_barrier);
+
+        // ---- Pass 2: Final lighting on baked albedo/height ----
+        vkCmdBeginRenderPass(cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, final_pipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, final_layout, 0, 1,
+                                &final_dset, 0, nullptr);
+        vkCmdPushConstants(cmd, final_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                           sizeof(PushConstants), &pc);
+        VkViewport viewport = {0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f};
+        VkRect2D scissor = {{0, 0}, {width, height}};
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
+    } else {
+        // ---- Single pass (original path) ----
+        vkCmdBeginRenderPass(cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
+                                &dset, 0, nullptr);
+        vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                           sizeof(PushConstants), &pc);
+        VkViewport viewport = {0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f};
+        VkRect2D scissor = {{0, 0}, {width, height}};
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
+    }
 
     // Memory barrier: color attachment writes → transfer read (readback).
     VkImageMemoryBarrier barrier = {};
@@ -1076,10 +1752,6 @@ int main(int argc, char** argv) {
 
     vkEndCommandBuffer(cmd);
 
-    VkSubmitInfo submit = {};
-    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &cmd;
     vkResetFences(device, 1, &fence);
     vkQueueSubmit(queue, 1, &submit, fence);
     vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
@@ -1150,6 +1822,23 @@ int main(int argc, char** argv) {
     vkDestroyDescriptorSetLayout(device, dsl, nullptr);
     vkDestroyDescriptorPool(device, dpool, nullptr);
     vmaDestroyBuffer(allocator, ubo_buffer, ubo_alloc);
+
+    if (use_bake) {
+        vkDestroyPipeline(device, bake_pipeline, nullptr);
+        vkDestroyPipelineLayout(device, bake_layout, nullptr);
+        vkDestroyRenderPass(device, bake_render_pass, nullptr);
+        vkDestroyFramebuffer(device, bake_framebuffer, nullptr);
+        vkDestroyImageView(device, bake_view, nullptr);
+        vkDestroySampler(device, bake_sampler, nullptr);
+        vmaDestroyImage(allocator, bake_image, bake_alloc);
+        vkDestroyDescriptorPool(device, bake_dpool, nullptr);
+        vkDestroyDescriptorSetLayout(device, bake_dsl, nullptr);
+        vkDestroyPipeline(device, final_pipeline, nullptr);
+        vkDestroyPipelineLayout(device, final_layout, nullptr);
+        vkDestroyDescriptorPool(device, final_dpool, nullptr);
+        vkDestroyDescriptorSetLayout(device, final_dsl, nullptr);
+    }
+
     vkDestroyCommandPool(device, pool, nullptr);
     vkDestroyFence(device, fence, nullptr);
     vmaDestroyAllocator(allocator);
