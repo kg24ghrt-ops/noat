@@ -1075,14 +1075,6 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "bench: warmup done\n");
         for (uint32_t f = 0; f < frames; ++f) {
             std::fprintf(stderr, "bench: timed frame %u/%u\n", f, frames);
-            vkResetCommandBuffer(cmd, 0);
-            VkCommandBufferBeginInfo begin_ci = {};
-            begin_ci.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-            begin_ci.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-            vkBeginCommandBuffer(cmd, &begin_ci);
-
-            std::fprintf(stderr, "bench: timed frame %u/%u\n", f, frames);
-
             auto frame_t0 = std::chrono::high_resolution_clock::now();
 
             vkResetCommandBuffer(cmd, 0);
