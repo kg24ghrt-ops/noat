@@ -1096,6 +1096,7 @@ int main(int argc, char** argv) {
             vkBeginCommandBuffer(cmd, &begin_ci);
 
             vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, f * 2);
+            std::fprintf(stderr, "bench: frame %u ts1\n", f);
 
             VkClearValue clear_color = {{0.0f, 0.0f, 0.0f, 0.0f}};
             VkRenderPassBeginInfo rp_begin = {};
@@ -1119,12 +1120,13 @@ int main(int argc, char** argv) {
             vkCmdEndRenderPass(cmd);
 
             vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, f * 2 + 1);
+            std::fprintf(stderr, "bench: frame %u ts2\n", f);
             vkEndCommandBuffer(cmd);
 
             vkResetFences(device, 1, &fence);
             vkQueueSubmit(queue, 1, &submit, fence);
             vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
-        }
+            std::fprintf(stderr, "bench: frame %u submitted\n", f);
         std::fprintf(stderr, "bench: timed done\n");
 
         vkGetQueryPoolResults(device, timestamp_pool, 0, frames * 2,
