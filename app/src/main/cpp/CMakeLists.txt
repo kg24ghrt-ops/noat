@@ -13,7 +13,6 @@ set(THIRD_PARTY "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 
 # NDK provides vulkan headers + the device provides libvulkan.so at runtime.
 find_library(VULKAN_LIBRARY NAMES vulkan REQUIRED)
-find_library(ANDROID_LIBRARY NAMES android REQUIRED)
 find_library(EGL_LIBRARY NAMES EGL REQUIRED)
 
 add_library(paper-engine SHARED
@@ -29,7 +28,7 @@ target_include_directories(paper-engine PRIVATE
 
 target_link_libraries(paper-engine PRIVATE
     ${VULKAN_LIBRARY}
-    ${ANDROID_LIBRARY}
+    android
     ${EGL_LIBRARY}
     -static-libstdc++
 )

@@ -6,6 +6,7 @@
 // storeOp STORE.
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
+#define VMA_IMPLEMENTATION
 #include <stb_image_write.h>
 
 #include "renderer.h"
@@ -715,22 +716,41 @@ bool AppRenderer::renderFrame() {
 void AppRenderer::releaseSurface() {
     vkDeviceWaitIdle(m_device);
     destroySyncObjects();
-    for (auto iv : m_swapchainImageViews)
-        vkDestroyImageView(m_device, iv, nullptr);
-    m_swapchainImageViews.clear();
-    for (auto fb : m_swapchainFramebuffers)
-        vkDestroyFramebuffer(m_device, fb, nullptr);
-    m_swapchainFramebuffers.clear();
-    if (m_swapchain != VK_NULL_HANDLE) {
-        vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
-        m_swapchain = VK_NULL_HANDLE;
-    }
+    destroySwapchain();
     if (m_surface != VK_NULL_HANDLE) {
         vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
         m_surface = VK_NULL_HANDLE;
     }
     m_surfaceCreated = false;
     m_swapchainCreated = false;
+}
+
+void AppRenderer::destroySwapchain() {
+    if (m_swapchain != VK_NULL_HANDLE) {
+        vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
+        m_swapchain = VK_NULL_HANDLE;
+    }
+    for (auto iv : m_swapchainImageViews)
+        vkDestroyImageView(m_device, iv, nullptr);
+    m_swapchainImageViews.clear();
+    for (auto fb : m_swapchainFramebuffers)
+        vkDestroyFramebuffer(m_device, fb, nullptr);
+    m_swapchainFramebuffers.clear();
+}
+
+void AppRenderer::destroySyncObjects() {
+    if (m_inFlightFence != VK_NULL_HANDLE) {
+        vkDestroyFence(m_device, m_inFlightFence, nullptr);
+        m_inFlightFence = VK_NULL_HANDLE;
+    }
+    if (m_renderFinishedSemaphore != VK_NULL_HANDLE) {
+        vkDestroySemaphore(m_device, m_renderFinishedSemaphore, nullptr);
+        m_renderFinishedSemaphore = VK_NULL_HANDLE;
+    }
+    if (m_imageAvailableSemaphore != VK_NULL_HANDLE) {
+        vkDestroySemaphore(m_device, m_imageAvailableSemaphore, nullptr);
+        m_imageAvailableSemaphore = VK_NULL_HANDLE;
+    }
 }
 
 void AppRenderer::shutdown() {
