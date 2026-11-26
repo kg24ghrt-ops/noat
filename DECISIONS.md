@@ -96,3 +96,71 @@ Add a render case at 1080x1920 with extreme lighting (light_intensity=2.0, sheen
 - Perf gates: 720x1280 p95 ≤6ms, 1080x1920 p95 ≤12ms
 - Idle dirty-flag gate: ≤1 rendered frame per 60s idle
 
+---
+
+## Phase 7 — Typed Handwriting (Phase 6 bake accepted, Item E accepted)
+
+### Shaping: HarfBuzz everywhere (Option A)
+- HarfBuzz is MIT-licensed; pinned version; built in CI only.
+- Linked into both headless executable and Android app native library.
+- Android platform shaping is only a test oracle, not production path.
+- Source files: `native/paper-headless/shape_run.h/.cpp` (already in CMake build).
+- Shape first, deform second. Never jitter per codepoint.
+
+### Fonts (approved, pinned, OFL)
+1. **Noto Sans Myanmar** — SIL OFL; Myanmar shaping + rasterization
+2. **Patrick Hand** — SIL OFL; Latin handwriting appearance
+- Do not use system fonts in production shaping.
+- If Patrick Hand lacks required glyphs/metrics, propose one OFL Latin handwriting replacement and ask before switching.
+
+### Mobile calibration defaults
+- Write-zoom ruling gap target: ≈44.7 dp (minimum comfortable writing target)
+- Approximate writing pan window: ≈51 mm
+- Myanmar on narrow 6.35 mm ruling: default to every-other line
+- If Myanmar metrics require more vertical space, prefer skipping lines or increasing zoom over shrinking below legibility.
+
+### Zawgyi policy (v1 Unicode-only)
+- Detect Zawgyi input; warn the user.
+- Do not silently mangle it.
+- Do not add a Zawgyi converter without approval.
+
+### Myanmar correctness (non-negotiable)
+- Stacked/subjoined consonants, kinzi, medial signs, reordered vowel signs, above/below-base marks, tone marks, asat, Myanmar digits, Myanmar punctuation.
+- **Shape first, deform second.**
+- Deform at grapheme-cluster level; all glyphs in one cluster share warp/rotation/offset.
+- Smooth low-frequency warp field; neighbouring clusters move coherently.
+- No Latin cursive slant or connecting strokes on Myanmar.
+- Broken stacks, detached marks, or incorrect reordering = fail.
+
+### Text editing rules
+- Android IME handles input.
+- Caret movement and backspace operate on grapheme clusters, never strand a mark.
+- Do not deform uncommitted IME composing text; composing text stable and readable.
+- Deform only committed text.
+
+### Line constraint (hard product rule)
+- Text only on ruled lines, within margins.
+- Left bound = margin line + padding; right bound = sheet edge − padding.
+- One logical line per ruled line; word wrap → next ruled line.
+- Enter → next ruled line; backspace at line start → previous line's end.
+- Caret only on valid baseline slots; page overflow → new page.
+- Myanmar line box from real font metrics; stacked consonants/below-base marks never clipped.
+- If line box doesn't fit ruling gap: auto-fit scale / auto-select wider ruling / every-other line (narrow 6.35 mm default).
+
+### Realism model (procedural only, no datasets/ML/data/network)
+- SDF glyph atlas + positioned glyph instances + shader-side handwriting deformation.
+- Bake SDF atlas once per font/size; Myanmar stacks/marks become atlas entries keyed by glyph ID.
+- Typed text = positioned glyph instances with cluster IDs.
+- Deformation stack: low-frequency warp field, per-cluster baseline drift, small rotation, ±3–5% size variation, advance variation, stroke-width modulation, ink density/pressure variation, pen-lift gaps, entry/exit hooks, ink feathering, graphite tooth adhesion.
+- Pencil mode and pen mode.
+- Seeded and deterministic: same seed + same text = identical pixels.
+
+### Performance (no regression against locked/baked goldens)
+- Text edits use incremental dirty-rect baking; no full-page re-bake per keystroke.
+- Partial texture upload on dirty rect; coalesce updates during fast typing.
+- Caret blink = cheap overlay; no paper re-render.
+- Keystroke → pixel ≤32 ms (aim ≤16 ms).
+- Idle GPU work near zero.
+- No per-keystroke allocations.
+
+
