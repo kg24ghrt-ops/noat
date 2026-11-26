@@ -1102,7 +1102,7 @@ int main(int argc, char** argv) {
             vkBeginCommandBuffer(cmd, &begin_ci);
 
             std::fprintf(stderr, "bench: frame %u before timestamp\n", f);
-            vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, f * 2);
+            vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, f * 2);
             std::fprintf(stderr, "bench: frame %u after timestamp\n", f);
 
             VkClearValue clear_color = {{0.0f, 0.0f, 0.0f, 0.0f}};
@@ -1127,7 +1127,7 @@ int main(int argc, char** argv) {
             vkCmdDraw(cmd, 3, 1, 0, 0);
             vkCmdEndRenderPass(cmd);
 
-            vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, f * 2 + 1);
+            vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, f * 2 + 1);
             std::fprintf(stderr, "bench: frame %u end render pass\n", f);
             vkEndCommandBuffer(cmd);
 
