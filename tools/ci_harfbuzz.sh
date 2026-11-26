@@ -96,8 +96,8 @@ meson setup "$HARFBUZZ_DIR" \
   --cross-file="$CROSS_FILE" \
   --buildtype=release \
   -Ddefault_library=static \
-  -Dtests=false \
-  -Dutils=false
+  -Dtests=disabled \
+  -Dutils=disabled
 
 meson compile -C "$BUILD_DIR" -j"$(nproc)"
 
@@ -113,8 +113,8 @@ cd "$HOST_BUILD_DIR"
 meson setup "$HARFBUZZ_DIR" \
   --buildtype=release \
   -Ddefault_library=static \
-  -Dtests=false \
-  -Dutils=false
+  -Dtests=disabled \
+  -Dutils=disabled
 
 meson compile -C "$HOST_BUILD_DIR" -j"$(nproc)"
 
