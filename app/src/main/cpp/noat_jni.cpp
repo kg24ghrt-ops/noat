@@ -135,16 +135,13 @@ JNIEXPORT void JNICALL
 Java_com_example_noat_PaperLib_paperInitWithSurface(JNIEnv*, jobject, jobject surface) {
     auto& r = renderer();
     if (!r.init()) {
-        __android_log_print(ANDROID_LOG_ERROR, "noat", "AppRenderer::init failed");
         return;
     }
     ANativeWindow* window = ANativeWindow_fromSurface(nullptr, surface);
     if (window == nullptr) {
-        __android_log_print(ANDROID_LOG_ERROR, "noat", "ANativeWindow_fromSurface failed");
         return;
     }
     if (!r.createSurface(window)) {
-        __android_log_print(ANDROID_LOG_ERROR, "noat", "createSurface failed");
         ANativeWindow_release(window);
         return;
     }
@@ -213,7 +210,7 @@ Java_com_example_noat_PaperLib_paperRenderFrame(JNIEnv*, jobject) {
     auto& p = params();
     r.updateParams(&p, sizeof(p));
     if (!r.renderFrame()) {
-        __android_log_print(ANDROID_LOG_ERROR, "noat", "renderFrame failed");
+        return;
     }
 }
 

@@ -7,14 +7,13 @@
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define VMA_IMPLEMENTATION
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
 #include <stb_image_write.h>
 
 #include "renderer.h"
 #include "paper_wear_spv.h"
 #include "vert_spirv.inc"
 
-#include <android/log.h>
-#include <vulkan/vulkan_android.h>
 #include <cstring>
 #include <vector>
 
@@ -22,12 +21,8 @@ namespace noat {
 
 namespace {
 
-void logV(const char* msg) {
-    __android_log_print(ANDROID_LOG_INFO, "noat", "%s", msg);
-}
-void logE(const char* msg) {
-    __android_log_print(ANDROID_LOG_ERROR, "noat", "%s", msg);
-}
+void logV(const char*) {}
+void logE(const char*) {}
 
 } // namespace
 
