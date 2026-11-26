@@ -1027,7 +1027,6 @@ int main(int argc, char** argv) {
 
     if (bench) {
         {
-        std::fprintf(stderr, "bench: entering bench mode\n");
         std::vector<double> gpu_times;
         gpu_times.reserve(frames);
 
@@ -1038,7 +1037,6 @@ int main(int argc, char** argv) {
         pc.seed = (float)seed;
 
         // Warmup frames (not timed)
-        std::fprintf(stderr, "bench: starting warmup=%u frames=%u\n", warmup, frames);
         for (uint32_t w = 0; w < warmup; ++w) {
             vkResetCommandBuffer(cmd, 0);
             VkCommandBufferBeginInfo begin_ci = {};
@@ -1072,9 +1070,7 @@ int main(int argc, char** argv) {
             vkQueueSubmit(queue, 1, &submit, fence);
             vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
         }
-        std::fprintf(stderr, "bench: warmup done\n");
         for (uint32_t f = 0; f < frames; ++f) {
-            std::fprintf(stderr, "bench: timed frame %u/%u\n", f, frames);
             auto frame_t0 = std::chrono::high_resolution_clock::now();
 
             vkResetCommandBuffer(cmd, 0);
@@ -1112,9 +1108,7 @@ int main(int argc, char** argv) {
             auto frame_t1 = std::chrono::high_resolution_clock::now();
             double frame_ms = std::chrono::duration<double, std::milli>(frame_t1 - frame_t0).count();
             gpu_times.push_back(frame_ms);
-            std::fprintf(stderr, "bench: frame %u submitted (%.2fms)\n", f, frame_ms);
         }
-        std::fprintf(stderr, "bench: timed done\n");
 
         std::sort(gpu_times.begin(), gpu_times.end());
         double gpu_p50 = 0.0, gpu_p95 = 0.0;
