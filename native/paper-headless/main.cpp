@@ -697,31 +697,22 @@ int main(int argc, char** argv) {
     // ---- Timestamp query pool for GPU timing (bench mode) ----
     VkQueryPool timestamp_pool = VK_NULL_HANDLE;
     double timestamp_period = 1.0f;  // nanoseconds per tick
-    bool timestamp_queries_supported = false;
     if (bench) {
         VkPhysicalDeviceProperties props2;
         vkGetPhysicalDeviceProperties(chosen, &props2);
         timestamp_period = props2.limits.timestampPeriod;
-        // Check if timestamp queries are supported
-        VkPhysicalDeviceFeatures2 features2 = {};
-        features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        vkGetPhysicalDeviceFeatures2(chosen, &features2);
-        timestamp_queries_supported = features2.features.timestampQueryAndWrite != VK_FALSE;
-        std::fprintf(stderr, "bench: timestampQueryAndWrite=%d timestampPeriod=%f\n",
-                     timestamp_queries_supported, timestamp_period);
-
-        if (!timestamp_queries_supported) {
-            std::fprintf(stderr, "error: timestamp queries not supported on this device\n");
-            return 1;
-        }
+        std::fprintf(stderr, "bench: timestampPeriod=%f\n", timestamp_period);
 
         VkQueryPoolCreateInfo qp_ci = {};
         qp_ci.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
         qp_ci.queryType = VK_QUERY_TYPE_TIMESTAMP;
         qp_ci.queryCount = frames * 2;
-        if (vkCreateQueryPool(device, &qp_ci, nullptr, &timestamp_pool) != VK_SUCCESS) {
-            std::fprintf(stderr, "error: vkCreateQueryPool failed\n");
-            return 1;
+        VkResult qr = vkCreateQueryPool(device, &qp_ci, nullptr, &timestamp_pool);
+        if (qr != VK_SUCCESS) {
+            std::fprintf(stderr, "bench: vkCreateQueryPool failed (%d), timestamps unavailable\n", qr);
+            timestamp_pool = VK_NULL_HANDLE;
+        } else {
+            std::fprintf(stderr, "bench: query pool created\n");
         }
     }
 
