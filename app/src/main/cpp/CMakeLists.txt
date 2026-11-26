@@ -11,11 +11,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -O2 -DNDEBUG")
 # Raw Vulkan calls otherwise. No Magnum, no Corrade, no flextVk.
 set(THIRD_PARTY "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 
-target_include_directories(paper-engine PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${THIRD_PARTY}
-)
-
 # NDK provides vulkan headers + the device provides libvulkan.so at runtime.
 find_library(VULKAN_LIBRARY NAMES vulkan REQUIRED)
 find_library(ANDROID_LIBRARY NAMES android REQUIRED)
@@ -25,6 +20,11 @@ add_library(paper-engine SHARED
     renderer.cpp
     noat_jni.cpp
     paper_wear_spv.h
+)
+
+target_include_directories(paper-engine PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${THIRD_PARTY}
 )
 
 target_link_libraries(paper-engine PRIVATE
