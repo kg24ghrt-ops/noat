@@ -63,19 +63,19 @@ ANDROID_API_LEVEL=31
 TOOLCHAIN_PREFIX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android$ANDROID_API_LEVEL"
 LLVM_AR="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
 LLVM_STRIP="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
-NDK_SYSROOT="$NDK/platforms/android-${ANDROID_API_LEVEL}/arch-arm64"
 
 # ---- Build for Android arm64 ----
-# Use environment variables for cross-compiler (more reliable than meson cross-file).
+# Use environment variables for cross-compiler. Let clang's --target flag
+# handle sysroot automatically (NDK r27 uses sysroot/ not platforms/).
 export CC="$TOOLCHAIN_PREFIX-clang"
 export CXX="$TOOLCHAIN_PREFIX-clang++"
 export AR="$LLVM_AR"
 export STRIP="$LLVM_STRIP"
 export PKG_CONFIG_LIBDIR=""
 export PKG_CONFIG_PATH=""
-export CFLAGS="--target=aarch64-linux-android${ANDROID_API_LEVEL} --sysroot=$NDK_SYSROOT"
-export CXXFLAGS="--target=aarch64-linux-android${ANDROID_API_LEVEL} --sysroot=$NDK_SYSROOT"
-export LDFLAGS="--target=aarch64-linux-android${ANDROID_API_LEVEL} --sysroot=$NDK_SYSROOT"
+export CFLAGS="--target=aarch64-linux-android${ANDROID_API_LEVEL}"
+export CXXFLAGS="--target=aarch64-linux-android${ANDROID_API_LEVEL}"
+export LDFLAGS="--target=aarch64-linux-android${ANDROID_API_LEVEL}"
 
 BUILD_DIR="$OUT_DIR/build-android"
 rm -rf "$BUILD_DIR"
