@@ -28,8 +28,6 @@
 
 namespace {
 
-using namespace noat;
-
 struct PushConstants {
     float time;
     float resolution_x;
@@ -412,6 +410,8 @@ static void apply_params_json(Params& p, const JsonValue& v) {
 #include "vert_spirv.inc"
 #include "shape_run.h"
 #include "sdf_atlas.h"
+
+using namespace noat;
 
 struct Metrics {
     std::string device;
