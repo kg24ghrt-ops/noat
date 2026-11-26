@@ -1040,6 +1040,7 @@ int main(int argc, char** argv) {
     submit.pCommandBuffers = &cmd;
 
     if (bench) {
+        {
         std::fprintf(stderr, "bench: starting warmup+frames=%u+%u\n", warmup, frames);
         std::vector<double> gpu_times;
         gpu_times.reserve(frames);
@@ -1198,6 +1199,7 @@ int main(int argc, char** argv) {
         vkDestroyDevice(device, nullptr);
         vkDestroyInstance(instance, nullptr);
 
+        }
         return 0;
     }
 
