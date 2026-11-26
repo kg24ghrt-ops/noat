@@ -96,9 +96,10 @@ meson setup "$HARFBUZZ_DIR" \
   --cross-file="$CROSS_FILE" \
   --buildtype=release \
   -Ddefault_library=static \
-  -Dicu=disabled
+  -Dicu=disabled \
+  -Dtests=disabled
 
-meson compile -C "$BUILD_DIR" -j"$(nproc)"
+meson compile -C "$BUILD_DIR" libharfbuzz -j"$(nproc)"
 
 cp "$BUILD_DIR/src/libharfbuzz.a" "$OUT_DIR/libharfbuzz-android-arm64.a"
 echo "[ci_harfbuzz] wrote $OUT_DIR/libharfbuzz-android-arm64.a"
@@ -112,9 +113,10 @@ cd "$HOST_BUILD_DIR"
 meson setup "$HARFBUZZ_DIR" \
   --buildtype=release \
   -Ddefault_library=static \
-  -Dicu=disabled
+  -Dicu=disabled \
+  -Dtests=disabled
 
-meson compile -C "$HOST_BUILD_DIR" -j"$(nproc)"
+meson compile -C "$HOST_BUILD_DIR" libharfbuzz -j"$(nproc)"
 
 cp "$HOST_BUILD_DIR/src/libharfbuzz.a" "$OUT_DIR/libharfbuzz-host.a"
 echo "[ci_harfbuzz] wrote $OUT_DIR/libharfbuzz-host.a"
