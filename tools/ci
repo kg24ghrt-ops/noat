@@ -23,8 +23,12 @@ case "$lane" in
     echo "[ci] running apk lane"
     bash "$REPO_ROOT/tools/ci_apk.sh" "$@"
     ;;
+  perf)
+    echo "[ci] running perf lane"
+    bash "$REPO_ROOT/tools/ci_perf.sh" "$@"
+    ;;
   *)
-    echo "usage: tools/ci <shader|native|apk>" >&2
+    echo "usage: tools/ci <shader|native|apk|perf>" >&2
     exit 2
     ;;
 esac

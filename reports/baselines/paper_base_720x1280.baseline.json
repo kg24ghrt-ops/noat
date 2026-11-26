@@ -1,0 +1,20 @@
+{
+  "device": "Mali-G610 MC6",
+  "resolution": "720x1280",
+  "time": 0,
+  "seed": 12345,
+  "gpu_ms_p50": 6.73631,
+  "gpu_ms_p95": 8.42546,
+  "wall_ms_p50": 6.73631,
+  "wall_ms_p95": 8.42546,
+  "passes": 1,
+  "shader_cycles_malioc": -1,
+  "bytes_written_estimate": 0,
+  "bytes_read_estimate": 0,
+  "peak_alloc_bytes": 0,
+  "thermal_status": null,
+  "frames_presented": 60,
+  "frames_skipped": 0,
+  "validation": "ok",
+  "result": "pass"
+}
