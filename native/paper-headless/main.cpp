@@ -595,6 +595,7 @@ int main(int argc, char** argv) {
         else if (arg == "--warmup" && i + 1 < argc) { warmup = (uint32_t)std::stoul(argv[++i]); }
         else if (arg == "--frames" && i + 1 < argc) { frames = (uint32_t)std::stoul(argv[++i]); }
         else if (arg == "--shape") { do_shape = true; }
+        else if (arg == "--shape-dump") { do_shape = true; }
         else if (arg == "--text" && i + 1 < argc) { shape_text = argv[++i]; }
         else if (arg == "--text-file" && i + 1 < argc) { shape_text_file = argv[++i]; }
         else if (arg == "--font" && i + 1 < argc) { shape_font = argv[++i]; }
@@ -822,6 +823,11 @@ int main(int argc, char** argv) {
                     VK_VERSION_MINOR(api_version),
                     VK_VERSION_PATCH(api_version));
         std::printf("  \"headless\": true\n");
+#ifdef NOAT_HAVE_HARFBUZZ
+        std::printf(",\"shaping\": \"harfbuzz\"\n");
+#else
+        std::printf(",\"shaping\": \"none\"\n");
+#endif
         std::printf("}\n");
         vkDestroyInstance(instance, nullptr);
         return 0;
