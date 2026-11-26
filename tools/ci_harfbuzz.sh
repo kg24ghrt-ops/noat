@@ -29,7 +29,28 @@ if [ ! -d "$HARFBUZZ_DIR" ]; then
   echo "[ci_harfbuzz] Downloading HarfBuzz $HARFBUZZ_VERSION"
   curl -fsSL --retry 3 -o "$HARFBUZZ_TARBALL" \
     "https://github.com/harfbuzz/harfbuzz/releases/download/$HARFBUZZ_VERSION/harfbuzz-$HARFBUZZ_VERSION.tar.xz"
+
+  # Verify the download is a valid tar.xz (not an HTML error page)
+  if ! head -c 2 "$HARFBUZZ_TARBALL" | od -An -tx1 | grep -q 'fd 37'; then
+    echo "[ci_harfbuzz] ERROR: downloaded file is not a valid xz archive" >&2
+    head -c 200 "$HARFBUZZ_TARBALL" >&2 || true
+    rm -f "$HARFBUZZ_TARBALL"
+    exit 1
+  fi
+
   tar -xf "$HARFBUZZ_TARBALL" -C "$OUT_DIR"
+fi
+
+# Verify meson.build exists in the expected source directory.
+# GitHub release tarballs sometimes nest differently; search if needed.
+if [ ! -f "$HARFBUZZ_DIR/meson.build" ]; then
+  FOUND_DIR=$(find "$OUT_DIR" -maxdepth 3 -name meson.build -print -quit 2>/dev/null | xargs -I{} dirname {} 2>/dev/null || true)
+  if [ -z "$FOUND_DIR" ]; then
+    echo "[ci_harfbuzz] ERROR: cannot find meson.build under $OUT_DIR" >&2
+    exit 1
+  fi
+  echo "[ci_harfbuzz] found meson source at $FOUND_DIR (expected $HARFBUZZ_DIR)"
+  HARFBUZZ_DIR="$FOUND_DIR"
 fi
 
 # Install meson/ninja if needed
