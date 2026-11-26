@@ -6,7 +6,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-OUT_DIR="ci-out/harfbuzz"
+OUT_DIR="$REPO_ROOT/ci-out/harfbuzz"
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
