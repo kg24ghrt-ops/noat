@@ -17,6 +17,8 @@ set(THIRD_PARTY "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 
 add_executable(paper-headless
     main.cpp
+    shape_run.cpp
+    sdf_atlas.cpp
 )
 
 target_include_directories(paper-headless PRIVATE
@@ -39,6 +41,15 @@ else()
     target_link_libraries(paper-headless PRIVATE
         Vulkan::Vulkan
     )
+endif()
+
+# HarfBuzz (complex-script text shaping) - built in CI
+if(DEFINED HARFBUZZ_LIBRARY AND HARFBUZZ_LIBRARY)
+    target_link_libraries(paper-headless PRIVATE ${HARFBUZZ_LIBRARY})
+    if(DEFINED HARFBUZZ_INCLUDE_DIR AND HARFBUZZ_INCLUDE_DIR)
+        target_include_directories(paper-headless PRIVATE ${HARFBUZZ_INCLUDE_DIR})
+    endif()
+    target_compile_definitions(paper-headless PRIVATE NOAT_HAVE_HARFBUZZ=1)
 endif()
 
 target_compile_definitions(paper-headless PRIVATE
