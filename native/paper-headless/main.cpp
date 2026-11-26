@@ -26,6 +26,8 @@
 #include <string>
 #include <vector>
 
+using namespace noat;
+
 namespace {
 
 struct PushConstants {
@@ -410,8 +412,6 @@ static void apply_params_json(Params& p, const JsonValue& v) {
 #include "vert_spirv.inc"
 #include "shape_run.h"
 #include "sdf_atlas.h"
-
-using namespace noat;
 
 struct Metrics {
     std::string device;
