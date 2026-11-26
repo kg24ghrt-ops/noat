@@ -28,6 +28,8 @@
 
 namespace {
 
+using namespace noat;
+
 struct PushConstants {
     float time;
     float resolution_x;
