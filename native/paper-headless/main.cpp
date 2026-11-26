@@ -26,6 +26,9 @@
 #include <string>
 #include <vector>
 
+#include "shape_run.h"
+#include "sdf_atlas.h"
+
 namespace {
 
 struct PushConstants {
@@ -408,8 +411,6 @@ static void apply_params_json(Params& p, const JsonValue& v) {
 
 // Embedded fullscreen-triangle vertex SPIR-V (generated from shaders/fullscreen_triangle.vert).
 #include "vert_spirv.inc"
-#include "shape_run.h"
-#include "sdf_atlas.h"
 
 struct Metrics {
     std::string device;
