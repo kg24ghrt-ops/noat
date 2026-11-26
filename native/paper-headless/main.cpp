@@ -694,27 +694,8 @@ int main(int argc, char** argv) {
     VkQueue queue;
     vkGetDeviceQueue(device, queue_family, 0, &queue);
 
-    // ---- Timestamp query pool for GPU timing (bench mode) ----
-    VkQueryPool timestamp_pool = VK_NULL_HANDLE;
-    double timestamp_period = 1.0f;  // nanoseconds per tick
-    if (bench) {
-        VkPhysicalDeviceProperties props2;
-        vkGetPhysicalDeviceProperties(chosen, &props2);
-        timestamp_period = props2.limits.timestampPeriod;
-        std::fprintf(stderr, "bench: timestampPeriod=%f\n", timestamp_period);
-
-        VkQueryPoolCreateInfo qp_ci = {};
-        qp_ci.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-        qp_ci.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        qp_ci.queryCount = frames * 2;
-        VkResult qr = vkCreateQueryPool(device, &qp_ci, nullptr, &timestamp_pool);
-        if (qr != VK_SUCCESS) {
-            std::fprintf(stderr, "bench: vkCreateQueryPool failed (%d), timestamps unavailable\n", qr);
-            timestamp_pool = VK_NULL_HANDLE;
-        } else {
-            std::fprintf(stderr, "bench: query pool created\n");
-        }
-    }
+    // ---- Bench mode uses wall-clock timing around submit/wait
+    // (vkCmdWriteTimestamp segfaults on Mali-G610; timestamp queries unsupported).
 
     // ---- VMA allocator ----
     VmaVulkanFunctions vk_funcs = {};
@@ -1049,7 +1030,6 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "bench: entering bench mode\n");
         std::vector<double> gpu_times;
         gpu_times.reserve(frames);
-        std::vector<uint64_t> timestamps(frames * 2);
 
         PushConstants pc{};
         pc.time = (float)time;
@@ -1101,9 +1081,15 @@ int main(int argc, char** argv) {
             begin_ci.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
             vkBeginCommandBuffer(cmd, &begin_ci);
 
-            std::fprintf(stderr, "bench: frame %u before timestamp\n", f);
-            vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, f * 2);
-            std::fprintf(stderr, "bench: frame %u after timestamp\n", f);
+            std::fprintf(stderr, "bench: timed frame %u/%u\n", f, frames);
+
+            auto frame_t0 = std::chrono::high_resolution_clock::now();
+
+            vkResetCommandBuffer(cmd, 0);
+            VkCommandBufferBeginInfo begin_ci = {};
+            begin_ci.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            begin_ci.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            vkBeginCommandBuffer(cmd, &begin_ci);
 
             VkClearValue clear_color = {{0.0f, 0.0f, 0.0f, 0.0f}};
             VkRenderPassBeginInfo rp_begin = {};
@@ -1114,7 +1100,6 @@ int main(int argc, char** argv) {
             rp_begin.clearValueCount = 1;
             rp_begin.pClearValues = &clear_color;
             vkCmdBeginRenderPass(cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
-            std::fprintf(stderr, "bench: frame %u begin render pass\n", f);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
                                     &dset, 0, nullptr);
@@ -1126,29 +1111,18 @@ int main(int argc, char** argv) {
             vkCmdSetScissor(cmd, 0, 1, &scissor);
             vkCmdDraw(cmd, 3, 1, 0, 0);
             vkCmdEndRenderPass(cmd);
-
-            vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, f * 2 + 1);
-            std::fprintf(stderr, "bench: frame %u end render pass\n", f);
             vkEndCommandBuffer(cmd);
 
             vkResetFences(device, 1, &fence);
             vkQueueSubmit(queue, 1, &submit, fence);
             vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
-            std::fprintf(stderr, "bench: frame %u submitted\n", f);
+
+            auto frame_t1 = std::chrono::high_resolution_clock::now();
+            double frame_ms = std::chrono::duration<double, std::milli>(frame_t1 - frame_t0).count();
+            gpu_times.push_back(frame_ms);
+            std::fprintf(stderr, "bench: frame %u submitted (%.2fms)\n", f, frame_ms);
         }
         std::fprintf(stderr, "bench: timed done\n");
-
-        vkGetQueryPoolResults(device, timestamp_pool, 0, frames * 2,
-                              timestamps.size() * sizeof(uint64_t), timestamps.data(),
-                              sizeof(uint64_t), VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
-
-        for (uint32_t f = 0; f < frames; ++f) {
-            uint64_t start = timestamps[f * 2];
-            uint64_t end = timestamps[f * 2 + 1];
-            if (start == 0 || end == 0) continue;
-            double ms = (double)(end - start) * timestamp_period / 1000000.0;
-            gpu_times.push_back(ms);
-        }
 
         std::sort(gpu_times.begin(), gpu_times.end());
         double gpu_p50 = 0.0, gpu_p95 = 0.0;
@@ -1189,7 +1163,6 @@ int main(int argc, char** argv) {
 
         // ---- Cleanup ----
         vkDeviceWaitIdle(device);
-        vkDestroyQueryPool(device, timestamp_pool, nullptr);
         vmaDestroyBuffer(allocator, readback_buffer, buf_alloc);
         vmaDestroyImage(allocator, color_image, color_alloc);
         vkDestroyFramebuffer(device, framebuffer, nullptr);
