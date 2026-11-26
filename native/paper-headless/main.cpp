@@ -626,7 +626,7 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "error: cannot read font %s\n", shape_font.c_str());
             return 1;
         }
-        ShapedRun run = shape_text(utf8.c_str(), static_cast<int32_t>(utf8.size()),
+        ShapedRun run = noat::shape_text(utf8.c_str(), static_cast<int32_t>(utf8.size()),
                                    font_data.empty() ? nullptr : font_data.data(),
                                    font_data.size(), shape_font_size,
                                    shape_direction.c_str(), shape_script.c_str(),
