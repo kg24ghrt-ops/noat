@@ -31,7 +31,7 @@ bash "$REPO_ROOT/tools/ci_fonts.sh"
 HARFBUZZ_DIR="$REPO_ROOT/ci-out/harfbuzz"
 HARFBUZZ_ANDROID_LIB="$HARFBUZZ_DIR/libharfbuzz-android-arm64.a"
 HARFBUZZ_HOST_LIB="$HARFBUZZ_DIR/libharfbuzz-host.a"
-HARFBUZZ_INCLUDE="$HARFBUZZ_DIR/harfbuzz-8.4.0/src"
+HARFBUZZ_INCLUDE="$HARFBUZZ_DIR/src"
 
 if [ ! -f "$HARFBUZZ_ANDROID_LIB" ]; then
   echo "[ci_native] ERROR: Android HarfBuzz library not found at $HARFBUZZ_ANDROID_LIB" >&2

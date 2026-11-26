@@ -12,9 +12,6 @@ mkdir -p "$OUT_DIR"
 
 # Locate Android NDK
 NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-${ANDROID_NDK:-}}}"
-if [ -z "$NDK" ]; then
-  NDK="${ANDROID_NDK_ROOT:-}"
-fi
 if [ -z "$NDK" ] || [ ! -d "$NDK" ]; then
   echo "[ci_harfbuzz] ERROR: ANDROID_NDK_ROOT not set" >&2
   exit 1
@@ -66,34 +63,26 @@ ANDROID_API_LEVEL=31
 TOOLCHAIN_PREFIX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android$ANDROID_API_LEVEL"
 LLVM_AR="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
 LLVM_STRIP="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+NDK_SYSROOT="$NDK/platforms/android-${ANDROID_API_LEVEL}/arch-arm64"
 
 # ---- Build for Android arm64 ----
+# Use environment variables for cross-compiler (more reliable than meson cross-file).
+export CC="$TOOLCHAIN_PREFIX-clang"
+export CXX="$TOOLCHAIN_PREFIX-clang++"
+export AR="$LLVM_AR"
+export STRIP="$LLVM_STRIP"
+export PKG_CONFIG_LIBDIR=""
+export PKG_CONFIG_PATH=""
+export CFLAGS="--target=aarch64-linux-android${ANDROID_API_LEVEL} --sysroot=$NDK_SYSROOT"
+export CXXFLAGS="--target=aarch64-linux-android${ANDROID_API_LEVEL} --sysroot=$NDK_SYSROOT"
+export LDFLAGS="--target=aarch64-linux-android${ANDROID_API_LEVEL} --sysroot=$NDK_SYSROOT"
+
 BUILD_DIR="$OUT_DIR/build-android"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-CROSS_FILE="$OUT_DIR/android-arm64-cross.txt"
-cat > "$CROSS_FILE" << CROSS_EOF
-[binaries]
-c = '${TOOLCHAIN_PREFIX}-clang'
-cpp = '${TOOLCHAIN_PREFIX}-clang++'
-ar = '${LLVM_AR}'
-strip = '${LLVM_STRIP}'
-pkgconfig = 'false'
-
-[properties]
-sys_root = '${NDK}/platforms/android-${ANDROID_API_LEVEL}/arch-arm64'
-
-[host_machine]
-system = 'android'
-cpu = 'aarch64'
-cpu_family = 'aarch64'
-endian = 'little'
-CROSS_EOF
-
 cd "$BUILD_DIR"
 meson setup "$HARFBUZZ_DIR" \
-  --cross-file="$CROSS_FILE" \
   --buildtype=release \
   -Ddefault_library=static \
   -Dicu=disabled \
@@ -105,6 +94,8 @@ cp "$BUILD_DIR/src/libharfbuzz.a" "$OUT_DIR/libharfbuzz-android-arm64.a"
 echo "[ci_harfbuzz] wrote $OUT_DIR/libharfbuzz-android-arm64.a"
 
 # ---- Build for host (for shaping tool) ----
+unset CC CXX AR STRIP PKG_CONFIG_LIBDIR PKG_CONFIG_PATH CFLAGS CXXFLAGS LDFLAGS
+
 HOST_BUILD_DIR="$OUT_DIR/build-host"
 rm -rf "$HOST_BUILD_DIR"
 mkdir -p "$HOST_BUILD_DIR"
