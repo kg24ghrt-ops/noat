@@ -1096,7 +1096,9 @@ int main(int argc, char** argv) {
             begin_ci.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
             vkBeginCommandBuffer(cmd, &begin_ci);
 
+            std::fprintf(stderr, "bench: frame %u before timestamp\n", f);
             vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, f * 2);
+            std::fprintf(stderr, "bench: frame %u after timestamp\n", f);
 
             VkClearValue clear_color = {{0.0f, 0.0f, 0.0f, 0.0f}};
             VkRenderPassBeginInfo rp_begin = {};
@@ -1107,6 +1109,7 @@ int main(int argc, char** argv) {
             rp_begin.clearValueCount = 1;
             rp_begin.pClearValues = &clear_color;
             vkCmdBeginRenderPass(cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+            std::fprintf(stderr, "bench: frame %u begin render pass\n", f);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
                                     &dset, 0, nullptr);
@@ -1120,11 +1123,13 @@ int main(int argc, char** argv) {
             vkCmdEndRenderPass(cmd);
 
             vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, f * 2 + 1);
+            std::fprintf(stderr, "bench: frame %u end render pass\n", f);
             vkEndCommandBuffer(cmd);
 
             vkResetFences(device, 1, &fence);
             vkQueueSubmit(queue, 1, &submit, fence);
             vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+            std::fprintf(stderr, "bench: frame %u submitted\n", f);
         }
         std::fprintf(stderr, "bench: timed done\n");
 
