@@ -1041,6 +1041,7 @@ int main(int argc, char** argv) {
 
     if (bench) {
         {
+        std::fprintf(stderr, "bench: entering bench mode\n");
         std::vector<double> gpu_times;
         gpu_times.reserve(frames);
         std::vector<uint64_t> timestamps(frames * 2);
@@ -1052,6 +1053,7 @@ int main(int argc, char** argv) {
         pc.seed = (float)seed;
 
         // Warmup frames (not timed)
+        std::fprintf(stderr, "bench: starting warmup=%u frames=%u\n", warmup, frames);
         for (uint32_t w = 0; w < warmup; ++w) {
             vkResetCommandBuffer(cmd, 0);
             VkCommandBufferBeginInfo begin_ci = {};
@@ -1085,8 +1087,9 @@ int main(int argc, char** argv) {
             vkQueueSubmit(queue, 1, &submit, fence);
             vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
         }
-        // Timed frames
+        std::fprintf(stderr, "bench: warmup done\n");
         for (uint32_t f = 0; f < frames; ++f) {
+            std::fprintf(stderr, "bench: timed frame %u/%u\n", f, frames);
             vkResetCommandBuffer(cmd, 0);
             VkCommandBufferBeginInfo begin_ci = {};
             begin_ci.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
