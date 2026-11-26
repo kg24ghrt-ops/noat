@@ -42,9 +42,9 @@ if [ ! -d "$HARFBUZZ_DIR" ]; then
 fi
 
 # Verify meson.build exists in the expected source directory.
-# GitHub release tarballs sometimes nest differently; search if needed.
+# GitHub release tarballs may nest differently; search if needed.
 if [ ! -f "$HARFBUZZ_DIR/meson.build" ]; then
-  FOUND_DIR=$(find "$OUT_DIR" -maxdepth 3 -name meson.build -print -quit 2>/dev/null | xargs -I{} dirname {} 2>/dev/null || true)
+  FOUND_DIR=$(find "$OUT_DIR" -maxdepth 4 -name meson.build -print -quit 2>/dev/null | xargs -I{} dirname {} 2>/dev/null || true)
   if [ -z "$FOUND_DIR" ]; then
     echo "[ci_harfbuzz] ERROR: cannot find meson.build under $OUT_DIR" >&2
     exit 1
