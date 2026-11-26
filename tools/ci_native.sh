@@ -31,7 +31,14 @@ bash "$REPO_ROOT/tools/ci_fonts.sh"
 HARFBUZZ_DIR="$REPO_ROOT/ci-out/harfbuzz"
 HARFBUZZ_ANDROID_LIB="$HARFBUZZ_DIR/libharfbuzz-android-arm64.a"
 HARFBUZZ_HOST_LIB="$HARFBUZZ_DIR/libharfbuzz-host.a"
-HARFBUZZ_INCLUDE="$HARFBUZZ_DIR/src"
+
+# Find HarfBuzz source include directory (tarball may nest differently).
+HARFBUZZ_INCLUDE=$(find "$HARFBUZZ_DIR" -maxdepth 4 -name "hb-blob.h" -print -quit 2>/dev/null | xargs -I{} dirname {} 2>/dev/null || true)
+if [ -z "$HARFBUZZ_INCLUDE" ]; then
+  echo "[ci_native] ERROR: cannot find HarfBuzz source headers under $HARFBUZZ_DIR" >&2
+  exit 1
+fi
+echo "[ci_native] HarfBuzz include: $HARFBUZZ_INCLUDE"
 
 if [ ! -f "$HARFBUZZ_ANDROID_LIB" ]; then
   echo "[ci_native] ERROR: Android HarfBuzz library not found at $HARFBUZZ_ANDROID_LIB" >&2
