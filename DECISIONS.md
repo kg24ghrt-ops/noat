@@ -113,6 +113,12 @@ Add a render case at 1080x1920 with extreme lighting (light_intensity=2.0, sheen
 - Do not use system fonts in production shaping.
 - If Patrick Hand lacks required glyphs/metrics, propose one OFL Latin handwriting replacement and ask before switching.
 
+**HarfBuzz build note**: Meson cross-compilation for Android arm64 fails on GitHub Actions
+(runner tries to execute ARM64 sanity-check binary on x86_64 host). HarfBuzz build is
+best-effort: if it fails, the paper engine compiles without it behind `NOAT_HAVE_HARFBUZZ`
+guard. Font assets (`ci_fonts.sh`) are still fetched and bundled. Revisit HarfBuzz
+integration when a stable cross-compile method is available.
+
 ### Mobile calibration defaults
 - Write-zoom ruling gap target: ≈44.7 dp (minimum comfortable writing target)
 - Approximate writing pan window: ≈51 mm
