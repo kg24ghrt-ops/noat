@@ -26,8 +26,6 @@
 #include <string>
 #include <vector>
 
-using namespace noat;
-
 namespace {
 
 struct PushConstants {
@@ -622,11 +620,11 @@ int main(int argc, char** argv) {
             return 1;
         }
         std::vector<unsigned char> font_data;
-        if (!shape_font.empty() && !load_file_bytes(shape_font, font_data)) {
+        if (!shape_font.empty() && !noat::load_file_bytes(shape_font, font_data)) {
             std::fprintf(stderr, "error: cannot read font %s\n", shape_font.c_str());
             return 1;
         }
-        ShapedRun run = noat::shape_text(utf8.c_str(), static_cast<int32_t>(utf8.size()),
+        noat::ShapedRun run = noat::shape_text(utf8.c_str(), static_cast<int32_t>(utf8.size()),
                                    font_data.empty() ? nullptr : font_data.data(),
                                    font_data.size(), shape_font_size,
                                    shape_direction.c_str(), shape_script.c_str(),
@@ -635,7 +633,7 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "error: shaping produced no glyphs\n");
             return 1;
         }
-        std::string json = shaped_run_to_json(run);
+        std::string json = noat::shaped_run_to_json(run);
         std::ofstream out(shape_out);
         if (!out) {
             std::fprintf(stderr, "error: cannot write %s\n", shape_out.c_str());
@@ -657,7 +655,7 @@ int main(int argc, char** argv) {
             return 1;
         }
         std::vector<unsigned char> font_data;
-        if (!load_file_bytes(atlas_font, font_data)) {
+        if (!noat::load_file_bytes(atlas_font, font_data)) {
             std::fprintf(stderr, "error: cannot read font %s\n", atlas_font.c_str());
             return 1;
         }
@@ -674,7 +672,7 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "error: --atlas-glyphs produced no glyph ids\n");
             return 1;
         }
-        SdfAtlasResult res = bake_sdf_atlas(font_data.data(), font_data.size(),
+        noat::SdfAtlasResult res = noat::bake_sdf_atlas(font_data.data(), font_data.size(),
                                             glyph_ids, atlas_ppem,
                                             atlas_supersample);
         if (res.glyphs.empty()) {
