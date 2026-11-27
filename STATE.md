@@ -9,14 +9,13 @@
 - **M4 (paper_wear)**: Baseline exists (153.75ms @ 720x1280, 134.22ms @ 1080x1920) — not yet optimized
 - **M5 (Item A - bake)**: Complete — verified on device, ~19x speedup
 - **M6 (Item E - idle)**: Complete — verified on device, 1 frame per 60s idle
-- **M7 (typed text)**: IN PROGRESS — CI green (run 45848888260, all 3 lanes), baked goldens committed, 4x zoom passes
+- **M7 (typed text)**: IN PROGRESS — CI green (run 45927302902, all 3 lanes), baked goldens committed, 4x zoom passes, HarfBuzz linked into Android artifact
 
 ## Active Work
 Phase 7 (typed handwriting on ruled lines): HarfBuzz shaping + SDF atlas + Myanmar correctness + handwriting deformation
 
 ## Blocked
 - malioc not available — cycle counts unmeasured in all baselines.
-- HarfBuzz Android arm64 cross-compilation fails on GitHub Actions (meson sanity check tries to run ARM64 binary on x86_64 host). Build is best-effort; paper engine works without HarfBuzz behind `NOAT_HAVE_HARFBUZZ` guard.
 
 ## Key Files
 - `shaders/paper_content.frag` — content shader (UBO-fixed, verified)
