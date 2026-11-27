@@ -1,7 +1,10 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include <android/native_window.h>
+
+// ANativeWindow is an Android NDK type; forward-declare here so this header
+// compiles on host Linux (C unit tests) as well as on Android (renderer).
+struct ANativeWindow;
 
 namespace noat {
 
