@@ -40,6 +40,52 @@ struct PushConstants {
 };
 static_assert(sizeof(PushConstants) == 16, "push constants must be 16 bytes");
 
+// Simple hash functions for C++ (mirroring GLSL versions)
+static uint32_t hash_u32(uint32_t x) {
+    x ^= x >> 16;
+    x *= 0x7feb352d;
+    x ^= x >> 15;
+    x *= 0x846ca68b;
+    x ^= x >> 16;
+    return x;
+}
+static float hash_f(float x) {
+    return fract(std::sin(x) * 43758.5453f);
+}
+static float hash2(float x, float y) {
+    return hash_f(x * 12.9898f + y * 78.233f);
+}
+
+struct GlyphInstance {
+    float pos_x, pos_y, size_x, size_y;
+    float color_r, color_g, color_b, color_a;
+    float scale_x, scale_y;
+    float rotation;
+    int cluster_id;
+    int pad0;
+};
+static_assert(sizeof(GlyphInstance) == 48, "GlyphInstance must be 48 bytes");
+
+struct GlyphInstancesUBO {
+    GlyphInstance glyphs[8];
+    int32_t count;
+    int32_t pad1, pad2, pad3;
+};
+static_assert(sizeof(GlyphInstancesUBO) == 8 * 48 + 16, "GlyphInstancesUBO size");
+
+struct DeformParamsUBO {
+    float warp_freq;
+    float warp_amp;
+    float warp_speed;
+    float cluster_drift;
+    float rot_variation;
+    float size_variation;
+    float advance_var;
+    float ink_feather;
+    float pressure_var;
+};
+static_assert(sizeof(DeformParamsUBO) == 9 * 4, "DeformParamsUBO must be 36 bytes");
+
 // ---------- minimal JSON parser ----------
 struct JsonValue {
     enum Type { Null, Bool, Number, String, Array, Object } type = Null;
@@ -1073,6 +1119,61 @@ int main(int argc, char** argv) {
     std::memcpy(ubo_mapped, &params, sizeof(Params));
     vmaFlushAllocation(allocator, ubo_alloc, 0, VK_WHOLE_SIZE);
 
+    // GlyphInstances UBO
+    VkBufferCreateInfo gi_ubuf_ci = {};
+    gi_ubuf_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    gi_ubuf_ci.size = sizeof(GlyphInstancesUBO);
+    gi_ubuf_ci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    gi_ubuf_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkBuffer gi_ubo_buffer = VK_NULL_HANDLE;
+    VmaAllocation gi_ubo_alloc = VK_NULL_HANDLE;
+    VkBufferCreateInfo gi_ci = gi_ubuf_ci;
+    VmaAllocationCreateInfo gi_ubo_alloc_ci = {};
+    gi_ubo_alloc_ci.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    gi_ubo_alloc_ci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                             VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    VmaAllocationInfo gi_ubo_alloc_info = {};
+    if (vmaCreateBuffer(allocator, &gi_ci, &gi_ubo_alloc_ci,
+                        &gi_ubo_buffer, &gi_ubo_alloc, &gi_ubo_alloc_info) != VK_SUCCESS) {
+        std::fprintf(stderr, "error: vmaCreateBuffer (glyph UBO) failed\n");
+        return 1;
+    }
+    void* gi_ubo_mapped = gi_ubo_alloc_info.pMappedData;
+
+    // DeformParams UBO
+    VkBufferCreateInfo dp_ci = {};
+    dp_ci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    dp_ci.size = sizeof(DeformParamsUBO);
+    dp_ci.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    dp_ci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkBuffer dp_ubo_buffer = VK_NULL_HANDLE;
+    VmaAllocation dp_ubo_alloc = VK_NULL_HANDLE;
+    VmaAllocationCreateInfo dp_ubo_alloc_ci = {};
+    dp_ubo_alloc_ci.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    dp_ubo_alloc_ci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                             VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    VmaAllocationInfo dp_ubo_alloc_info = {};
+    if (vmaCreateBuffer(allocator, &dp_ci, &dp_ubo_alloc_ci,
+                        &dp_ubo_buffer, &dp_ubo_alloc, &dp_ubo_alloc_info) != VK_SUCCESS) {
+        std::fprintf(stderr, "error: vmaCreateBuffer (deform UBO) failed\n");
+        return 1;
+    }
+    void* dp_ubo_mapped = dp_ubo_alloc_info.pMappedData;
+
+    // Default deformation parameters
+    DeformParamsUBO deform_params = {};
+    deform_params.warp_freq = 0.05f;
+    deform_params.warp_amp = 0.5f;
+    deform_params.warp_speed = 1.0f;
+    deform_params.cluster_drift = 0.3f;
+    deform_params.rot_variation = 0.05f;
+    deform_params.size_variation = 0.08f;
+    deform_params.advance_var = 0.05f;
+    deform_params.ink_feather = 2.0f;
+    deform_params.pressure_var = 0.3f;
+    std::memcpy(dp_ubo_mapped, &deform_params, sizeof(DeformParamsUBO));
+    vmaFlushAllocation(allocator, dp_ubo_alloc, 0, VK_WHOLE_SIZE);
+
     VkDescriptorPoolSize pool_size = {};
     pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     pool_size.descriptorCount = 1;
@@ -1100,6 +1201,14 @@ int main(int argc, char** argv) {
     binfo.buffer = ubo_buffer;
     binfo.offset = 0;
     binfo.range = sizeof(Params);
+    VkDescriptorBufferInfo gi_binfo = {};
+    gi_binfo.buffer = gi_ubo_buffer;
+    gi_binfo.offset = 0;
+    gi_binfo.range = sizeof(GlyphInstancesUBO);
+    VkDescriptorBufferInfo dp_binfo = {};
+    dp_binfo.buffer = dp_ubo_buffer;
+    dp_binfo.offset = 0;
+    dp_binfo.range = sizeof(DeformParamsUBO);
     VkWriteDescriptorSet wds = {};
     wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     wds.dstSet = dset;
@@ -1496,7 +1605,13 @@ int main(int argc, char** argv) {
         final_wds[5].dstBinding = 5;
         final_wds[5].descriptorCount = 1;
         final_wds[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        final_wds[5].pBufferInfo = &binfo;
+        final_wds[4].pBufferInfo = &gi_binfo;
+        final_wds[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        final_wds[5].dstSet = final_dset;
+        final_wds[5].dstBinding = 5;
+        final_wds[5].descriptorCount = 1;
+        final_wds[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        final_wds[5].pBufferInfo = &dp_binfo;
         vkUpdateDescriptorSets(device, 6, final_wds, 0, nullptr);
 
         // Final pipeline layout
@@ -1945,7 +2060,66 @@ int main(int argc, char** argv) {
             vkEndCommandBuffer(cmd);
 
             vkResetFences(device, 1, &fence);
-            auto t0 = std::chrono::high_resolution_clock::now();
+    auto t0 = std::chrono::high_resolution_clock::now();
+
+    // ---- Text shaping: create glyph instances for --text rendering ----
+    std::vector<GlyphInstance> glyph_instances;
+    if (!shape_text.empty() || !shape_text_file.empty()) {
+        std::string utf8;
+        if (!shape_text_file.empty()) {
+            std::size_t sz = 0;
+            utf8 = read_file(shape_text_file, &sz);
+        } else {
+            utf8 = shape_text;
+        }
+        if (!utf8.empty()) {
+            std::vector<unsigned char> font_data;
+            if (!shape_font.empty() && !noat::load_file_bytes(shape_font, font_data)) {
+                std::fprintf(stderr, "error: cannot read font %s\n", shape_font.c_str());
+                return 1;
+            }
+            noat::ShapedRun run = noat::shape_text(utf8.c_str(),
+                static_cast<int32_t>(utf8.size()),
+                font_data.empty() ? nullptr : font_data.data(),
+                font_data.size(), shape_font_size,
+                shape_direction.c_str(), shape_script.c_str(),
+                shape_language.c_str());
+            if (run.glyph_count > 0 && run.glyph_count <= 8) {
+                float scale = std::min(width, height) * 0.0015f;
+                float base_y = height * 0.5f;
+                float x = width * 0.1f;
+                for (uint32_t i = 0; i < run.glyph_count; ++i) {
+                    GlyphInstance gi = {};
+                    gi.pos_x = x;
+                    gi.pos_y = base_y + hash2((float)i, 0.0f) * 10.0f;
+                    float advance = (i + 1 < run.glyph_count)
+                        ? (run.positions[i + 1].x - run.positions[i].x)
+                        : shape_font_size * 0.6f;
+                    gi.size_x = advance * scale * 0.5f;
+                    gi.size_y = shape_font_size * scale * 0.8f;
+                    gi.color_r = 0.1f;
+                    gi.color_g = 0.1f;
+                    gi.color_b = 0.05f;
+                    gi.color_a = 0.9f;
+                    gi.scale_x = 1.0f;
+                    gi.scale_y = 1.0f;
+                    gi.rotation = hash2((float)i, 1.0f) * 0.1f;
+                    gi.cluster_id = run.cluster_ids ? run.cluster_ids[i] : (int)i;
+                    gi.pad0 = 0;
+                    glyph_instances.push_back(gi);
+                    x += gi.size_x * 0.9f + 4.0f * scale;
+                }
+                // Upload glyph instances to UBO
+                GlyphInstancesUBO gi_ubo = {};
+                gi_ubo.count = (int32_t)glyph_instances.size();
+                for (size_t i = 0; i < glyph_instances.size(); ++i) {
+                    gi_ubo.glyphs[i] = glyph_instances[i];
+                }
+                std::memcpy(gi_ubo_mapped, &gi_ubo, sizeof(GlyphInstancesUBO));
+                vmaFlushAllocation(allocator, gi_ubo_alloc, 0, VK_WHOLE_SIZE);
+            }
+        }
+    }
             vkQueueSubmit(queue, 1, &submit, fence);
             vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
             auto t1 = std::chrono::high_resolution_clock::now();
