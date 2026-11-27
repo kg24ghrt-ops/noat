@@ -46,16 +46,16 @@ if [ -z "$HARFBUZZ_INCLUDE" ]; then
 fi
 echo "[ci_native] HarfBuzz include: $HARFBUZZ_INCLUDE"
 
-# ---- Android arm32 build ----
+# ---- Android arm64 build ----
 ANDROID_DIR="$OUT_DIR/android"
 rm -rf "$ANDROID_DIR"
 mkdir -p "$ANDROID_DIR"
 
-echo "[ci_native] configuring Android armeabi-v7a build (HarfBuzz mandatory)"
+echo "[ci_native] configuring Android arm64 build (HarfBuzz mandatory)"
 cmake -S native/paper-headless -B "$ANDROID_DIR/build" \
   -DCMAKE_SYSTEM_NAME=Android \
   -DCMAKE_SYSTEM_VERSION=31 \
-  -DANDROID_ABI=armeabi-v7a \
+  -DANDROID_ABI=arm64-v8a \
   -DANDROID_PLATFORM=android-31 \
   -DANDROID_NDK="$NDK" \
   -DANDROID_STL=c++_static \
