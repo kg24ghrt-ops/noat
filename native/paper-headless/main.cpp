@@ -1933,6 +1933,8 @@ int main(int argc, char** argv) {
         vkDestroyDescriptorSetLayout(device, dsl, nullptr);
         vkDestroyDescriptorPool(device, dpool, nullptr);
         vmaDestroyBuffer(allocator, ubo_buffer, ubo_alloc);
+        vmaDestroyBuffer(allocator, gi_ubo_buffer, gi_ubo_alloc);
+        vmaDestroyBuffer(allocator, dp_ubo_buffer, dp_ubo_alloc);
 
         if (use_bake) {
             vkDestroyPipeline(device, bake_pipeline, nullptr);
@@ -2241,6 +2243,8 @@ int main(int argc, char** argv) {
         vkDestroyDescriptorSetLayout(device, dsl, nullptr);
         vkDestroyDescriptorPool(device, dpool, nullptr);
         vmaDestroyBuffer(allocator, ubo_buffer, ubo_alloc);
+        vmaDestroyBuffer(allocator, gi_ubo_buffer, gi_ubo_alloc);
+        vmaDestroyBuffer(allocator, dp_ubo_buffer, dp_ubo_alloc);
 
         if (use_bake) {
             vkDestroyPipeline(device, bake_pipeline, nullptr);
@@ -2453,9 +2457,11 @@ int main(int argc, char** argv) {
     vkDestroyPipelineLayout(device, layout, nullptr);
     vkDestroyDescriptorSetLayout(device, dsl, nullptr);
     vkDestroyDescriptorPool(device, dpool, nullptr);
-    vmaDestroyBuffer(allocator, ubo_buffer, ubo_alloc);
+        vmaDestroyBuffer(allocator, ubo_buffer, ubo_alloc);
+        vmaDestroyBuffer(allocator, gi_ubo_buffer, gi_ubo_alloc);
+        vmaDestroyBuffer(allocator, dp_ubo_buffer, dp_ubo_alloc);
 
-    if (use_bake) {
+        if (use_bake) {
         vkDestroyPipeline(device, bake_pipeline, nullptr);
         vkDestroyPipelineLayout(device, bake_layout, nullptr);
         vkDestroyRenderPass(device, bake_render_pass, nullptr);
