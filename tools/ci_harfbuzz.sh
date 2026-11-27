@@ -103,7 +103,7 @@ echo "[ci_harfbuzz] compiling ${#SRC_FILES[@]} source files"
 for src in "${SRC_FILES[@]}"; do
     bn=$(basename "$src" .cc)
     obj="$OBJ_DIR/$bn.o"
-    "$CLANG" --target=aarch64-linux-android31 \
+    "$CLANG" --target=armv7a-linux-androideabi31 \
         $INCLUDES \
         -O2 -DNDEBUG -Wno-error -c "$src" -o "$obj" 2>&1 | tail -5
     if [ ! -f "$obj" ]; then
