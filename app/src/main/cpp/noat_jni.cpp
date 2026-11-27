@@ -127,6 +127,9 @@ void applySizeId(const char* sizeId, ParamsMirror& p) {
     } else if (std::strcmp(sizeId, "A6") == 0) {
         p.paper_size_mm_x = 105.0f;
         p.paper_size_mm_y = 148.0f;
+    } else if (std::strcmp(sizeId, "B5") == 0) {
+        p.paper_size_mm_x = 176.0f;
+        p.paper_size_mm_y = 250.0f;
     } else if (std::strcmp(sizeId, "LETTER") == 0) {
         p.paper_size_mm_x = 215.9f;
         p.paper_size_mm_y = 279.4f;
