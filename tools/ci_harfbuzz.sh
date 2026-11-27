@@ -71,6 +71,16 @@ cat > "$HARFBUZZ_DIR/build-android/src/hb-version.h" << 'VERSION_EOF'
 #endif
 VERSION_EOF
 
+# Generate config.h (normally done by meson/autotools)
+cat > "$HARFBUZZ_DIR/build-android/src/config.h" << 'CONFIG_EOF'
+#ifndef HB_CONFIG_H
+#define HB_CONFIG_H
+
+#define HAVE_CONFIG_H 1
+
+#endif
+CONFIG_EOF
+
 # ---- Compile all HarfBuzz source files for Android arm64 ----
 echo "[ci_harfbuzz] compiling HarfBuzz for Android arm64"
 
