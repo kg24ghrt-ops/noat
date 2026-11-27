@@ -996,30 +996,35 @@ void AppRenderer::textSetDocument(const char* utf8, uint32_t byte_length) {
     m_document.set_rule_gap_mm(7.1f);
     m_document.set_rule_top_mm(25.4f);
     m_document.set_margin_x_mm(31.75f);
+    m_document.relayout();
     m_atlas_dirty = true;
     m_instances_dirty = true;
 }
 
 void AppRenderer::textInsert(const char* utf8, uint32_t byte_length) {
     m_document.insert_utf8(utf8, byte_length);
+    m_document.relayout();
     m_atlas_dirty = true;
     m_instances_dirty = true;
 }
 
 void AppRenderer::textBackspace() {
     m_document.backspace();
+    m_document.relayout();
     m_atlas_dirty = true;
     m_instances_dirty = true;
 }
 
 void AppRenderer::textDeleteForward() {
     m_document.delete_forward();
+    m_document.relayout();
     m_atlas_dirty = true;
     m_instances_dirty = true;
 }
 
 void AppRenderer::textEnter() {
     m_document.enter();
+    m_document.relayout();
     m_atlas_dirty = true;
     m_instances_dirty = true;
 }
