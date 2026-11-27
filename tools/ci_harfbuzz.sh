@@ -93,9 +93,9 @@ INCLUDES="-I$HARFBUZZ_DIR/src -I$HARFBUZZ_DIR/build-android/src -DHAVE_CONFIG_H"
 SRC_FILES=()
 for f in "$SRC_DIR"/*.cc; do
     bn=$(basename "$f")
-    # Skip files that require optional backends we don't use
+    # Skip test files and files that require optional backends we don't use
     case "$bn" in
-        hb-freetype.cc|hb-glib.cc|hb-icu.cc|hb-coretext.cc|hb-directwrite.cc|hb-fonttools.cc)
+        hb-freetype.cc|hb-glib.cc|hb-icu.cc|hb-coretext.cc|hb-directwrite.cc|hb-fonttools.cc|*test*)
             continue ;;
     esac
     SRC_FILES+=("$f")
@@ -108,7 +108,7 @@ for src in "${SRC_FILES[@]}"; do
     obj="$OBJ_DIR/$bn.o"
     "$CLANG" --target=aarch64-linux-android31 \
         $INCLUDES \
-        -O2 -DNDEBUG -c "$src" -o "$obj" 2>&1 | tail -5
+        -O2 -DNDEBUG -Wno-error -c "$src" -o "$obj" 2>&1 | tail -5
     if [ ! -f "$obj" ]; then
         echo "[ci_harfbuzz] ERROR: compilation failed for $src" >&2
         exit 1
