@@ -62,8 +62,8 @@ echo "[ci_harfbuzz] configuring HarfBuzz for Android arm64 (Meson)"
 ANDROID_CROSS_FILE="$OUT_DIR/android-arm64-cross.txt"
 cat > "$ANDROID_CROSS_FILE" << CROSS_EOF
 [binaries]
-c = '$TOOLCHAIN_PREFIX-clang'
-cpp = '$TOOLCHAIN_PREFIX-clang++'
+c = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang'
+cpp = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++'
 ar = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
 strip = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
 pkgconfig = 'false'
