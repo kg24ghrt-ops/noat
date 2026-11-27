@@ -46,14 +46,14 @@ typedef VkPipeline (*noat_pipeline_get_handle_fn)(const NoatPipeline *);
 
 typedef NoatRenderer *(*noat_renderer_create_fn)(void);
 typedef void (*noat_renderer_destroy_fn)(NoatRenderer *);
-typedef int (*noat_renderer_init_fn)(NoatRenderer *, ANativeWindow *);
+typedef int (*noat_renderer_init_fn)(NoatRenderer *, struct ANativeWindow *);
 typedef void (*noat_renderer_resize_fn)(NoatRenderer *, int, int);
 typedef void (*noat_renderer_render_frame_fn)(NoatRenderer *);
 typedef void (*noat_renderer_shutdown_fn)(NoatRenderer *);
 
-typedef const NoatPaperSize *(*noat_paper_default_size_fn)(void);
-typedef const NoatPaperSize *(*noat_paper_find_size_fn)(const char *);
-typedef void (*noat_paper_compute_quad_fn)(const NoatPaperSize *, float, float, float *, float *);
+typedef const PaperSize *(*noat_paper_default_size_fn)(void);
+typedef const PaperSize *(*noat_paper_find_size_fn)(const char *);
+typedef void (*noat_paper_compute_quad_fn)(const PaperSize *, float, float, float *, float *);
 
 static const char *vk_result_str(VkResult r) {
     static const char *s[] = {
