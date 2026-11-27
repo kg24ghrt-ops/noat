@@ -9,6 +9,8 @@
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 
+#include "text_document.h"
+
 namespace noat {
 
 class AppRenderer {
@@ -36,6 +38,76 @@ public:
     // Upload parameter block to the VMA uniform buffer.
     void updateParams(const void* data, size_t size);
 
+    // ---- Text document editing ----
+    // Set committed text (replaces all content). Relayouts immediately.
+    void textSetDocument(const char* utf8, uint32_t byte_length);
+    // Insert UTF-8 at cursor.
+    void textInsert(const char* utf8, uint32_t byte_length);
+    // Backspace at cursor.
+    void textBackspace();
+    // Delete forward at cursor.
+    void textDeleteForward();
+    // Enter (new line) at cursor.
+    void textEnter();
+    // Move cursor.
+    void textMoveLeft();
+    void textMoveRight();
+    void textMoveUp();
+    void textMoveDown();
+    void textMoveToLineStart();
+    void textMoveToLineEnd();
+    // Set cursor to a specific cluster index.
+    void textSetCursor(uint32_t cluster_index);
+    // IME composing text (not deformed, rendered separately).
+    void textSetComposing(const char* utf8, uint32_t byte_length);
+    void textClearComposing();
+
+    // Cursor access (for caret rendering on the Kotlin side).
+    uint32_t textCursor() const;
+    float textCursorX() const;
+    float textCursorY() const;
+    uint32_t textCursorLine() const;
+
+    // ---- Text (handwriting) GPU support ----
+    // A positioned, cluster-aware glyph instance ready for the SDF atlas.
+    struct GlyphInstance {
+        float x, y, w, h;          // screen px (cluster warp already applied)
+        float ax, ay, aw, ah;      // atlas rect px
+        float glyph_id;
+        float cluster_id;
+        float pad0, pad1;          // std430 align to 48 bytes
+    };
+    static_assert(sizeof(GlyphInstance) == 48, "GlyphInstance must be 48 bytes");
+
+    // Upload/replace the visible glyph instances. Called incrementally.
+    bool textUploadInstances(const GlyphInstance* instances, uint32_t count);
+    // Bind the SDF glyph atlas (RGBA8, R = signed distance).
+    bool textSetAtlas(const uint8_t* rgba8, int width, int height);
+    // Clear all text instances.
+    void textClearInstances();
+
+    // Deformation parameters (CPU-side, applied before upload).
+    struct DeformParams {
+        float warp_freq = 0.05f;
+        float warp_amp = 0.5f;
+        float warp_speed = 1.0f;
+        float cluster_drift = 0.3f;
+        float rot_variation = 0.05f;
+        float size_variation = 0.08f;
+        float advance_var = 0.05f;
+        float ink_feather = 2.0f;
+        float pressure_var = 0.3f;
+    };
+    void setDeformParams(const DeformParams& p);
+    const DeformParams& deformParams() const { return m_deform; }
+
+    // Caret overlay: draw a blinking caret without re-rendering document.
+    // Call each frame; returns true if caret should be visible this frame.
+    bool caretUpdate(float dt_seconds);
+    bool caretVisible() const { return m_caret_visible; }
+    // Force caret visibility (e.g. after user interaction).
+    void caretResetBlink();
+
 private:
     bool createInstance();
     bool selectPhysicalDevice();
@@ -47,6 +119,19 @@ private:
     void destroySwapchain();
     void destroyRenderResources();
     void destroySyncObjects();
+
+    bool createTextPipeline();
+    bool createTextDescriptor();
+    void destroyTextResources();
+    bool updateInstanceBufferCapacity(uint32_t capacity);
+
+    // ---- Text pipeline integration ----
+    // Shape document text with HarfBuzz, bake SDF atlas, upload instances.
+    bool textRelayoutAndUpload();
+    // Bake SDF atlas for the glyphs needed by the current shaped run.
+    bool textBakeAtlas();
+    // Upload deformation params as push constants (no UBO needed).
+    void textBindDeformParams();
 
     VkInstance m_instance{VK_NULL_HANDLE};
     VkPhysicalDevice m_physicalDevice{VK_NULL_HANDLE};
@@ -70,6 +155,43 @@ private:
     VkDescriptorSet m_descriptorSet{VK_NULL_HANDLE};
     VkBuffer m_paramsBuffer{VK_NULL_HANDLE};
     VmaAllocation m_paramsAlloc{VK_NULL_HANDLE};
+
+    // Text pipeline (instanced glyph quads, blends over the paper).
+    VkPipeline m_textPipeline{VK_NULL_HANDLE};
+    VkPipelineLayout m_textPipelineLayout{VK_NULL_HANDLE};
+    VkDescriptorSetLayout m_textDescriptorSetLayout{VK_NULL_HANDLE};
+    VkDescriptorPool m_textDescriptorPool{VK_NULL_HANDLE};
+    VkDescriptorSet m_textDescriptorSet{VK_NULL_HANDLE};
+    VkBuffer m_instanceBuffer{VK_NULL_HANDLE};
+    VmaAllocation m_instanceAlloc{VK_NULL_HANDLE};
+    VkBuffer m_quadVertexBuffer{VK_NULL_HANDLE};
+    VmaAllocation m_quadVertexAlloc{VK_NULL_HANDLE};
+    VkImage m_atlasImage{VK_NULL_HANDLE};
+    VmaAllocation m_atlasAlloc{VK_NULL_HANDLE};
+    VkImageView m_atlasView{VK_NULL_HANDLE};
+    VkSampler m_atlasSampler{VK_NULL_HANDLE};
+    int m_atlasWidth{0};
+    int m_atlasHeight{0};
+    uint32_t m_instanceCapacity{0};
+    uint32_t m_instanceCount{0};
+
+    // Deformation parameters (CPU-side).
+    DeformParams m_deform;
+
+    // Text document model.
+    TextDocument m_document;
+
+    // Shaped glyph data (from HarfBuzz) - used for atlas baking and positioning.
+    std::vector<uint32_t> m_shaped_glyph_ids;
+    std::vector<float> m_shaped_advances;
+    std::vector<uint32_t> m_shaped_cluster_ids;
+    bool m_atlas_dirty = true;   // atlas needs re-bake
+    bool m_instances_dirty = true; // instance buffer needs re-upload
+
+    // Caret overlay state.
+    bool m_caret_visible = true;
+    float m_caret_blink_timer = 0.0f;
+    static constexpr float kCaretBlinkInterval = 0.5f; // seconds
 
     VkCommandPool m_commandPool{VK_NULL_HANDLE};
     VkCommandBuffer m_commandBuffer{VK_NULL_HANDLE};
