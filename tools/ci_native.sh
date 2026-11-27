@@ -65,6 +65,7 @@ cmake -S native/paper-headless -B "$ANDROID_DIR/build" \
   -DNOAT_VULKAN_SDK="" \
   -DHARFBUZZ_INCLUDE_DIR="$HARFBUZZ_INCLUDE" \
   -DHARFBUZZ_LIBRARY="$HARFBUZZ_ANDROID_LIB" \
+  -DNOAT_HAVE_HARFBUZZ=ON \
   2>&1 | tail -n 20
 
 echo "[ci_native] building Android headless"
