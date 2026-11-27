@@ -291,10 +291,10 @@ static bool parse_glyph_outline(const unsigned char* glyf_data,
     if (depth > 32) return false;
     if (gid >= num_glyphs) return false;
     uint32_t off0 = (loca_index_size == 2)
-                        ? (uint32_t)rd_u16(loca_data + gid * 2)
+                        ? (uint32_t)rd_u16(loca_data + gid * 2) * 2
                         : rd_u32(loca_data + gid * 4);
     uint32_t off1 = (loca_index_size == 2)
-                        ? (uint32_t)rd_u16(loca_data + (gid + 1) * 2)
+                        ? (uint32_t)rd_u16(loca_data + (gid + 1) * 2) * 2
                         : rd_u32(loca_data + (gid + 1) * 4);
     if (off1 <= off0 || off1 - off0 > 1u << 20) return false; // sanity
     const unsigned char* g = glyf_data + off0;
