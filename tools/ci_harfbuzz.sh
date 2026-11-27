@@ -71,6 +71,10 @@ pkgconfig = 'false'
 [properties]
 sys_root = '$NDK/platforms/android-31/arch-arm64'
 skip_sanity_check = true
+c_args = ['--target=aarch64-linux-android31']
+cpp_args = ['--target=aarch64-linux-android31']
+c_link_args = ['--target=aarch64-linux-android31']
+cpp_link_args = ['--target=aarch64-linux-android31']
 
 [host_machine]
 system = 'android'
