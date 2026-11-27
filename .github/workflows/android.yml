@@ -89,6 +89,10 @@ jobs:
 
       - name: Build host corrade-rc (required to cross-compile vendored Corrade)
         run: |
+          if [ ! -d third_party/corrade ]; then
+            echo "third_party/corrade not present in repository; skipping corrade-rc build (not an approved dependency per CMakeLists.txt)."
+            exit 0
+          fi
           cmake -S third_party/corrade -B build/host-corrade \
             -DCMAKE_BUILD_TYPE=Release \
             -DWITH_INTERCONNECT=OFF \
@@ -196,20 +200,20 @@ jobs:
 
       - name: Compile C Vulkan unit tests (verify vulkan.h header resolution)
         run: |
-          clang -std=c11 -Wall -Wextra -Wpedantic \
+          # Compile-only on host Linux: Android NDK libs (-landroid -llog)
+          # are not available, so we verify header resolution without linking.
+          clang -std=c11 -Wall -Wextra -Wpedantic -c \
             -I app/src/main/cpp \
             -I "$ANDROID_NDK_ROOT/source/android/vulkan/include" \
             tests/noat_vulkan_test.c \
-            -o /tmp/noat_vulkan_test \
-            -lvulkan -ldl -landroid -llog
+            -o /tmp/noat_vulkan_test.o
           echo "=== noat_vulkan_test.c compiled successfully ==="
 
-          clang -std=c11 -Wall -Wextra -Wpedantic \
+          clang -std=c11 -Wall -Wextra -Wpedantic -c \
             -I app/src/main/cpp \
             -I "$ANDROID_NDK_ROOT/source/android/vulkan/include" \
             tests/noat_engine_test.c \
-            -o /tmp/noat_engine_test \
-            -lvulkan -ldl -landroid -llog
+            -o /tmp/noat_engine_test.o
           echo "=== noat_engine_test.c compiled successfully ==="
 
       - name: Compile and run PNG/A4 unit test
