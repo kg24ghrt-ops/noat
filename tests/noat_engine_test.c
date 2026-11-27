@@ -163,7 +163,7 @@ int main(void) {
      * Test 1: Paper geometry via library
      * ----------------------------------------------------------- */
     printf("Test 1: Paper geometry\n");
-    const NoatPaperSize *a4 = paper_default();
+    const PaperSize *a4 = paper_default();
     if (!a4 || strcmp(a4->id, "A4") != 0) {
         printf("  FAIL: default size not A4\n");
         failures++;
@@ -172,7 +172,7 @@ int main(void) {
                a4->id, a4->width_mm, a4->height_mm);
     }
 
-    const NoatPaperSize *legal = paper_find("LEGAL");
+    const PaperSize *legal = paper_find("LEGAL");
     if (!legal || legal->width_mm != 215.9f || legal->height_mm != 355.6f) {
         printf("  FAIL: LEGAL size wrong\n");
         failures++;
