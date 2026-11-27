@@ -62,11 +62,9 @@ HARFBUZZ_DIR="$(cd "$HARFBUZZ_DIR" && pwd)"
 # ---- Build for Android arm64 ----
 echo "[ci_harfbuzz] configuring HarfBuzz for Android arm64"
 cmake -S "$HARFBUZZ_DIR" -B "$OUT_DIR/build-android" \
-  -DCMAKE_SYSTEM_NAME=Android \
-  -DCMAKE_SYSTEM_VERSION=31 \
+  -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
   -DANDROID_ABI=arm64-v8a \
   -DANDROID_PLATFORM=android-29 \
-  -DANDROID_NDK="$NDK" \
   -DCMAKE_BUILD_TYPE=Release \
   -DHB_BUILD_TESTS=OFF \
   -DHB_BUILD_UTILS=OFF \
@@ -74,6 +72,8 @@ cmake -S "$HARFBUZZ_DIR" -B "$OUT_DIR/build-android" \
   -DHB_HAVE_GLIB=OFF \
   -DHB_HAVE_ICU=OFF \
   -DHB_HAVE_CORETEXT=OFF \
+  -DCMAKE_C_COMPILER_TARGET=aarch64-linux-android31 \
+  -DCMAKE_CXX_COMPILER_TARGET=aarch64-linux-android31 \
   -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
   -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
   -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
