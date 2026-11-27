@@ -50,7 +50,7 @@ static uint32_t hash_u32(uint32_t x) {
     return x;
 }
 static float hash_f(float x) {
-    return fract(std::sin(x) * 43758.5453f);
+    return std::fmod(std::sin(x) * 43758.5453f, 1.0f);
 }
 static float hash2(float x, float y) {
     return hash_f(x * 12.9898f + y * 78.233f);
@@ -64,14 +64,14 @@ struct GlyphInstance {
     int cluster_id;
     int pad0;
 };
-static_assert(sizeof(GlyphInstance) == 48, "GlyphInstance must be 48 bytes");
+static_assert(sizeof(GlyphInstance) == 52, "GlyphInstance must be 52 bytes");
 
 struct GlyphInstancesUBO {
     GlyphInstance glyphs[8];
     int32_t count;
     int32_t pad1, pad2, pad3;
 };
-static_assert(sizeof(GlyphInstancesUBO) == 8 * 48 + 16, "GlyphInstancesUBO size");
+static_assert(sizeof(GlyphInstancesUBO) == 8 * 52 + 16, "GlyphInstancesUBO size");
 
 struct DeformParamsUBO {
     float warp_freq;
@@ -2093,7 +2093,7 @@ int main(int argc, char** argv) {
                     gi.pos_x = x;
                     gi.pos_y = base_y + hash2((float)i, 0.0f) * 10.0f;
                     float advance = (i + 1 < run.glyph_count)
-                        ? (run.positions[i + 1].x - run.positions[i].x)
+                        ? (run.instances[i + 1].x - run.instances[i].x)
                         : shape_font_size * 0.6f;
                     gi.size_x = advance * scale * 0.5f;
                     gi.size_y = shape_font_size * scale * 0.8f;
@@ -2104,7 +2104,7 @@ int main(int argc, char** argv) {
                     gi.scale_x = 1.0f;
                     gi.scale_y = 1.0f;
                     gi.rotation = hash2((float)i, 1.0f) * 0.1f;
-                    gi.cluster_id = run.cluster_ids ? run.cluster_ids[i] : (int)i;
+                    gi.cluster_id = run.instances[i].cluster_id;
                     gi.pad0 = 0;
                     glyph_instances.push_back(gi);
                     x += gi.size_x * 0.9f + 4.0f * scale;
