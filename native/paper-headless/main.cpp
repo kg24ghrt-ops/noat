@@ -1385,8 +1385,14 @@ int main(int argc, char** argv) {
 
         // ============ FINAL PASS RESOURCES ============
 
-        // Final descriptor set layout: binding 0 = params UBO, 1 = albedo sampler, 2 = height sampler
-        VkDescriptorSetLayoutBinding final_bindings[3] = {};
+        // Final descriptor set layout:
+        //   binding 0 = params UBO
+        //   binding 1 = albedo sampler
+        //   binding 2 = height sampler
+        //   binding 3 = SDF atlas sampler
+        //   binding 4 = GlyphInstances UBO
+        //   binding 5 = DeformParams UBO
+        VkDescriptorSetLayoutBinding final_bindings[6] = {};
         final_bindings[0].binding = 0;
         final_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         final_bindings[0].descriptorCount = 1;
@@ -1399,23 +1405,35 @@ int main(int argc, char** argv) {
         final_bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         final_bindings[2].descriptorCount = 1;
         final_bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        final_bindings[3].binding = 3;
+        final_bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        final_bindings[3].descriptorCount = 1;
+        final_bindings[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        final_bindings[4].binding = 4;
+        final_bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        final_bindings[4].descriptorCount = 1;
+        final_bindings[4].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        final_bindings[5].binding = 5;
+        final_bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        final_bindings[5].descriptorCount = 1;
+        final_bindings[5].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         VkDescriptorSetLayoutCreateInfo final_dsl_ci = {};
         final_dsl_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        final_dsl_ci.bindingCount = 3;
+        final_dsl_ci.bindingCount = 6;
         final_dsl_ci.pBindings = final_bindings;
         if (vkCreateDescriptorSetLayout(device, &final_dsl_ci, nullptr, &final_dsl) != VK_SUCCESS) {
             std::fprintf(stderr, "error: vkCreateDescriptorSetLayout (final) failed\n");
             return 1;
         }
-        VkDescriptorPoolSize final_pool_sizes[2] = {};
+        VkDescriptorPoolSize final_pool_sizes[3] = {};
         final_pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        final_pool_sizes[0].descriptorCount = 1;
+        final_pool_sizes[0].descriptorCount = 3; // params + glyphs + deform
         final_pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        final_pool_sizes[1].descriptorCount = 2;
+        final_pool_sizes[1].descriptorCount = 3; // albedo + height + sdf_atlas
         VkDescriptorPoolCreateInfo final_dpool_ci = {};
         final_dpool_ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         final_dpool_ci.maxSets = 1;
-        final_dpool_ci.poolSizeCount = 2;
+        final_dpool_ci.poolSizeCount = 3;
         final_dpool_ci.pPoolSizes = final_pool_sizes;
         if (vkCreateDescriptorPool(device, &final_dpool_ci, nullptr, &final_dpool) != VK_SUCCESS) {
             std::fprintf(stderr, "error: vkCreateDescriptorPool (final) failed\n");
@@ -1438,7 +1456,11 @@ int main(int argc, char** argv) {
         height_info.sampler = bake_sampler;
         height_info.imageView = bake_view;
         height_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        VkWriteDescriptorSet final_wds[3] = {};
+        VkDescriptorImageInfo sdf_info = {};
+        sdf_info.sampler = bake_sampler;
+        sdf_info.imageView = bake_view;
+        sdf_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        VkWriteDescriptorSet final_wds[6] = {};
         final_wds[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         final_wds[0].dstSet = final_dset;
         final_wds[0].dstBinding = 0;
@@ -1457,7 +1479,25 @@ int main(int argc, char** argv) {
         final_wds[2].descriptorCount = 1;
         final_wds[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         final_wds[2].pImageInfo = &height_info;
-        vkUpdateDescriptorSets(device, 3, final_wds, 0, nullptr);
+        final_wds[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        final_wds[3].dstSet = final_dset;
+        final_wds[3].dstBinding = 3;
+        final_wds[3].descriptorCount = 1;
+        final_wds[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        final_wds[3].pImageInfo = &sdf_info;
+        final_wds[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        final_wds[4].dstSet = final_dset;
+        final_wds[4].dstBinding = 4;
+        final_wds[4].descriptorCount = 1;
+        final_wds[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        final_wds[4].pBufferInfo = &binfo;
+        final_wds[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        final_wds[5].dstSet = final_dset;
+        final_wds[5].dstBinding = 5;
+        final_wds[5].descriptorCount = 1;
+        final_wds[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        final_wds[5].pBufferInfo = &binfo;
+        vkUpdateDescriptorSets(device, 6, final_wds, 0, nullptr);
 
         // Final pipeline layout
         VkPushConstantRange final_pc_range = {};

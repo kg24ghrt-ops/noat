@@ -84,6 +84,109 @@ layout(std140, binding = 0) uniform Params {
 
 layout(set = 0, binding = 1) uniform sampler2D u_albedo;
 layout(set = 0, binding = 2) uniform sampler2D u_height;
+layout(set = 0, binding = 3) uniform sampler2D u_sdf_atlas;
+
+// ---------- glyph instance ----------
+layout(std140, binding = 4) uniform GlyphInstances {
+    // Up to 8 glyph instances
+    vec4 glyph_pos[8];      // x, y, w, h (screen space)
+    vec4 glyph_color[8];    // r, g, b, a
+    vec2 glyph_scale[8];    // x, y scale variation
+    float glyph_rot[8];     // rotation radians
+    int glyph_cluster[8];   // cluster id
+    int glyph_count;        // number of active glyphs
+} Glyphs;
+
+// ---------- deformation parameters ----------
+layout(std140, binding = 5) uniform DeformParams {
+    float warp_freq;        // spatial frequency of warp field
+    float warp_amp;         // amplitude of warp (pixels)
+    float warp_speed;       // animation speed
+    float cluster_drift;    // per-cluster baseline drift
+    float rot_variation;    // per-cluster rotation variation
+    float size_variation;   // per-cluster size variation
+    float advance_var;      // advance variation
+    float ink_feather;      // feather width (pixels)
+    float pressure_var;     // pressure/ink density variation
+} Deform;
+
+// ---------- hash and noise ----------
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float hash23(vec3 p) {
+    vec3 p3 = fract(vec3(p.xyz) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y + p3.z) * p3.z);
+}
+
+float noise2(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x),
+               mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+float fbm2(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    vec2 shift = vec2(100.0);
+    for (int i = 0; i < 4; ++i) {
+        v += a * noise2(p);
+        p = p * 2.0 + shift;
+        a *= 0.5;
+    }
+    return v;
+}
+
+// ---------- warp field ----------
+vec2 warp_field(vec2 p, float t) {
+    vec2 q = p * Deform.warp_freq + vec2(0.0, t * Deform.warp_speed);
+    float n1 = noise2(p * 0.5 + vec2(0.0, t * 0.5));
+    float n2 = noise2(p * 0.5 + vec2(1.0, t * 0.5 + 1.0));
+    return vec2(n1, n2) * Deform.warp_amp;
+}
+
+// ---------- rotate point around center ----------
+vec2 rotate_point(vec2 p, vec2 c, float angle) {
+    float s = sin(angle), c_angle = cos(angle);
+    vec2 d = p - c;
+    return c + vec2(d.x * c_angle - d.y * s, d.x * s + d.y * c_angle);
+}
+
+// ---------- SDF sample with deformation ----------
+float sample_sdf(vec2 glyph_uv, int cluster_idx, float t) {
+    // Per-cluster baseline drift
+    float drift = hash23(vec3(float(cluster_idx), 0.0, 0.0)) * Deform.cluster_drift;
+    glyph_uv.y += drift * 0.5;
+
+    // Per-cluster rotation
+    float rot = hash23(vec3(float(cluster_idx), 1.0, 0.0)) * Deform.rot_variation;
+    glyph_uv = rotate_point(glyph_uv, vec2(0.5, 0.5), rot);
+
+    // Per-cluster size variation
+    float size_var = 1.0 + hash23(vec3(float(cluster_idx), 2.0, 0.0)) * Deform.size_variation * 0.1;
+    glyph_uv = vec2(0.5) + (glyph_uv - vec2(0.5)) * size_var;
+
+    // Warp field
+    vec2 warp = warp_field(glyph_uv, t);
+    glyph_uv += warp;
+
+    // Sample SDF atlas
+    float sdf = texture(u_sdf_atlas, glyph_uv).r;
+    return sdf;
+}
+
+// ---------- ink feathering ----------
+float feather_edge(float sdf, float feather_px) {
+    // sdf in [0,1], 128 = surface (0.5), <128 outside, >128 inside
+    float sd = (sdf - 0.5) * 2.0; // convert to signed distance ~[-1,1]
+    return smoothstep(-feather_px * 0.5, feather_px * 0.5, sd);
+}
 
 // ---------- color temperature ----------
 vec3 temp_rgb(float K) {
@@ -147,6 +250,43 @@ void main() {
 
     vec3 paper_lit = albedo * diffuse + sheen_col;
     paper_lit = clamp(paper_lit, 0.0, 1.6);
+
+    // ---------- text rendering (handwriting deformation) ----------
+    vec3 text_color = vec3(0.0);
+    float text_alpha = 0.0;
+
+    for (int g = 0; g < Glyphs.glyph_count; ++g) {
+        // Check if pixel is inside glyph bounding box
+        vec2 glyph_origin = Glyphs.glyph_pos[g].xy;
+        vec2 glyph_size = Glyphs.glyph_pos[g].zw;
+        vec2 rel = (screen - glyph_origin) / glyph_size;
+
+        if (rel.x >= 0.0 && rel.x <= 1.0 && rel.y >= 0.0 && rel.y <= 1.0) {
+            // Sample SDF with deformation
+            float sdf = sample_sdf(rel, Glyphs.glyph_cluster[g], pc.time);
+            float alpha = feather_edge(sdf, Deform.ink_feather);
+
+            // Pressure/ink density variation per cluster
+            float pressure = 0.8 + hash23(vec3(float(Glyphs.glyph_cluster[g]), 3.0, 0.0)) * Deform.pressure_var * 0.4;
+
+            // Advance variation
+            float adv_var = 1.0 + hash23(vec3(float(Glyphs.glyph_cluster[g]), 4.0, 0.0)) * Deform.advance_var * 0.1;
+
+            float glyph_alpha = alpha * pressure * adv_var * Glyphs.glyph_color[g].a;
+
+            // Use the color from the glyph instance
+            vec3 glyph_col = Glyphs.glyph_color[g].rgb;
+
+            // Blend with existing text (later glyphs overlay)
+            text_alpha = max(text_alpha, glyph_alpha);
+            text_color = mix(text_color, glyph_col, glyph_alpha);
+        }
+    }
+
+    // Composite text onto paper
+    if (text_alpha > 0.001) {
+        paper_lit = mix(paper_lit, paper_lit * 0.3 + text_color * 0.9, text_alpha);
+    }
 
     // ---------- thickness rim on lit cut edge ----------
     highp float edge_px = max(dFdx(screen.x), dFdy(screen.y));
