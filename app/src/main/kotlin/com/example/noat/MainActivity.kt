@@ -21,6 +21,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.example.noat.R
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import kotlin.text.Regex
 
 class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
 
@@ -95,7 +96,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         imeInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE ||
                 actionId == EditorInfo.IME_ACTION_NEXT ||
-                actionId == EditorInfo.IME_ACTION_NULL
+                actionId == EditorInfo.IME_ACTION_UNSPECIFIED
             ) {
                 commitEnter()
                 true
@@ -188,9 +189,9 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
     }
 
     private fun parseShapedRun(json: String) {
-        val gcMatch = """\"glyph_count\":(\d+)""".regex.find(json)
+        val gcMatch = Regex("""\"glyph_count\":(\d+)""").find(json)
         shapedGlyphCount = if (gcMatch != null) gcMatch.groupValues[1].toInt() else 0
-        val ccMatch = """\"cluster_count\":(\d+)""".regex.find(json)
+        val ccMatch = Regex("""\"cluster_count\":(\d+)""").find(json)
         shapedClusterCount = if (ccMatch != null) ccMatch.groupValues[1].toInt() else 0
 
         shapedGlyphIds = IntArray(shapedGlyphCount)
@@ -199,7 +200,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         shapedXAdvance = FloatArray(shapedGlyphCount)
         shapedClusterIds = IntArray(shapedGlyphCount)
 
-        val instanceRegex = """\{"gid":(\d+),"x":([-\d.]+),"y":([-\d.]+),"xa":([-\d.]+),"ya":([-\d.]+),"xo":([-\d.]+),"yo":([-\d.]+),"cluster":(\d+)\}""".regex
+        val instanceRegex = Regex("""\{"gid":(\d+),"x":([-\d.]+),"y":([-\d.]+),"xa":([-\d.]+),"ya":([-\d.]+),"xo":([-\d.]+),"yo":([-\d.]+),"cluster":(\d+)\}""")
         var idx = 0
         for (match in instanceRegex.findAll(json)) {
             if (idx >= shapedGlyphCount) break
@@ -218,12 +219,12 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
     )
 
     private fun parseAtlasMeta(json: String) {
-        val wMatch = """\"width\":(\d+)""".regex.find(json)?.groupValues[1]?.toIntOrNull() ?: 0
-        val hMatch = """\"height\":(\d+)""".regex.find(json)?.groupValues[1]?.toIntOrNull() ?: 0
+        val wMatch = Regex("""\"width\":(\d+)""").find(json)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        val hMatch = Regex("""\"height\":(\d+)""").find(json)?.groupValues?.get(1)?.toIntOrNull() ?: 0
         atlasWidth = wMatch
         atlasHeight = hMatch
         atlasGlyphs = mutableListOf()
-        val glyphRegex = """\{"gid":(\d+),"x":(\d+),"y":(\d+),"w":(\d+),"h":(\d+),"advance_x":([-\d.]+),"bearing_x":([-\d.]+)\}""".regex
+        val glyphRegex = Regex("""\{"gid":(\d+),"x":(\d+),"y":(\d+),"w":(\d+),"h":(\d+),"advance_x":([-\d.]+),"bearing_x":([-\d.]+)\}""")
         for (match in glyphRegex.findAll(json)) {
             atlasGlyphs = atlasGlyphs + AtlasGlyphEntry(
                 match.groupValues[1].toInt(),
