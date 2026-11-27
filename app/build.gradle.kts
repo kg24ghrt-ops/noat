@@ -17,14 +17,6 @@ android {
         testInstrumentationRunner =
             "androidx.test.runner.AndroidJUnitRunner"
 
-        externalNativeBuild {
-            cmake {
-                abiFilters += listOf(
-                    "arm64-v8a",
-                    "x86_64"
-                )
-            }
-        }
     }
 
     signingConfigs {
@@ -72,15 +64,6 @@ android {
             if (signingCredentialsComplete) {
                 signingConfig = signingConfigs.getByName("release")
             }
-        }
-    }
-
-    ndkVersion = "30.0.16248370"
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.31.6"
         }
     }
 

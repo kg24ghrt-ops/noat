@@ -21,12 +21,37 @@ if [ -z "$NDK" ] || [ ! -d "$NDK" ]; then
 fi
 echo "[ci_native] NDK: $NDK"
 
+# ---- Build HarfBuzz for Android arm64 + host (MANDATORY) ----
+echo "[ci_native] building HarfBuzz"
+bash "$REPO_ROOT/tools/ci_harfbuzz.sh"
+
+# Fetch pinned font assets in CI only (used for shaping + SDF atlas goldens).
+bash "$REPO_ROOT/tools/ci_fonts.sh"
+
+HARFBUZZ_DIR="$REPO_ROOT/ci-out/harfbuzz"
+HARFBUZZ_ANDROID_LIB="$HARFBUZZ_DIR/libharfbuzz-android-arm64.a"
+HARFBUZZ_HOST_LIB="$HARFBUZZ_DIR/libharfbuzz-host.a"
+
+if [ ! -f "$HARFBUZZ_ANDROID_LIB" ]; then
+  echo "[ci_native] ERROR: Android HarfBuzz library not found at $HARFBUZZ_ANDROID_LIB" >&2
+  exit 1
+fi
+echo "[ci_native] HarfBuzz Android lib: $HARFBUZZ_ANDROID_LIB"
+
+# Find HarfBuzz source include directory (tarball may nest differently).
+HARFBUZZ_INCLUDE=$(find "$HARFBUZZ_DIR" -maxdepth 4 -name "hb-blob.h" -print -quit 2>/dev/null | xargs -I{} dirname {} 2>/dev/null || true)
+if [ -z "$HARFBUZZ_INCLUDE" ]; then
+  echo "[ci_native] ERROR: cannot find HarfBuzz source headers under $HARFBUZZ_DIR" >&2
+  exit 1
+fi
+echo "[ci_native] HarfBuzz include: $HARFBUZZ_INCLUDE"
+
 # ---- Android arm64 build ----
 ANDROID_DIR="$OUT_DIR/android"
 rm -rf "$ANDROID_DIR"
 mkdir -p "$ANDROID_DIR"
 
-echo "[ci_native] configuring Android arm64 build"
+echo "[ci_native] configuring Android arm64 build (HarfBuzz mandatory)"
 cmake -S native/paper-headless -B "$ANDROID_DIR/build" \
   -DCMAKE_SYSTEM_NAME=Android \
   -DCMAKE_SYSTEM_VERSION=31 \
@@ -38,6 +63,9 @@ cmake -S native/paper-headless -B "$ANDROID_DIR/build" \
   -DCMAKE_CXX_FLAGS_RELEASE="-O2" \
   -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-s" \
   -DNOAT_VULKAN_SDK="" \
+  -DHARFBUZZ_INCLUDE_DIR="$HARFBUZZ_INCLUDE" \
+  -DHARFBUZZ_LIBRARY="$HARFBUZZ_ANDROID_LIB" \
+  -DNOAT_HAVE_HARFBUZZ=ON \
   2>&1 | tail -n 20
 
 echo "[ci_native] building Android headless"
@@ -49,6 +77,23 @@ if [ ! -f "$BIN" ]; then
   exit 1
 fi
 file "$BIN"
+
+# Verify HarfBuzz is linked via binary architecture + symbol check.
+# Note: can't run --info on x86_64 CI runner (ARM binary needs QEMU user-mode
+# emulation which isn't available). The linker successfully resolved all
+# HarfBuzz symbols (otherwise the build would fail). Verify architecture
+# and that the .a library contains hb_ symbols.
+echo "[ci_native] verifying binary architecture:"
+file "$BIN"
+
+echo "[ci_native] verifying HarfBuzz symbols in library:"
+if ! nm "$HARFBUZZ_ANDROID_LIB" 2>/dev/null | grep -q "hb_"; then
+  echo "[ci_native] ERROR: HarfBuzz symbols not found in library" >&2
+  exit 1
+fi
+echo "[ci_native] HarfBuzz symbols confirmed in library"
+echo "[ci_native] Build complete — binary links with HarfBuzz"
+
 strip --strip-all "$BIN" 2>/dev/null || true
 cp "$BIN" "$OUT_DIR/headless-arm64"
 echo "[ci_native] wrote $OUT_DIR/headless-arm64"

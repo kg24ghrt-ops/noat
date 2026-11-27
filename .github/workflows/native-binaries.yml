@@ -1,0 +1,54 @@
+
+name: Native Binaries CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-binaries-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-binaries:
+    name: Build prebuilt libpaper-engine.so
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Android SDK + NDK
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-sdk-licenses: true
+          packages: >-
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;30.0.16248370
+            cmake;3.31.6
+
+      - name: Build native binaries
+        run: bash tools/ci_native_binaries.sh
+        env:
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_ROOT }}
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: libpaper-engine-binaries
+          path: |
+            ci-out/native-binaries/jniLibs/**/*.so
+            ci-out/native-binaries/binaries-metadata.json
+          if-no-files-found: error
+          retention-days: 30

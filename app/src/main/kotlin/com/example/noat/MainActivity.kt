@@ -11,7 +11,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.example.noat.R
-import android.widget.TextView
 import android.widget.Button
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 
@@ -49,10 +48,6 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         vulkanSurface.holder.setFormat(android.graphics.PixelFormat.RGBA_8888)
         vulkanSurface.holder.addCallback(this)
 
-        // Show engine info in the TextView
-        val textView = findViewById<TextView>(R.id.textView)
-        textView.text = getString(R.string.app_name)
-
         // FAB: cycle through paper material types on each tap
         val types = PaperMaterialPresets.values()
         val fab = findViewById<FloatingActionButton>(R.id.fab)
@@ -64,7 +59,6 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
                 0.92f, 0.94f, 0.98f,
                 0.4f, 0.1f, 0.6f, 0.5f, 1.0f, 0.08f
             )
-            textView.text = "${getString(R.string.app_name)} — ${type.name}"
         }
 
         // Size button: cycle through paper sizes (next to the FAB).
