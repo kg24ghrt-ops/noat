@@ -80,9 +80,9 @@ cmake -S "$HARFBUZZ_DIR" -B "$OUT_DIR/build-android" \
 echo "[ci_harfbuzz] building HarfBuzz"
 cmake --build "$OUT_DIR/build-android" --parallel
 
-HB_ANDROID_LIB="$OUT_DIR/build-android/src/libharfbuzz.a"
-if [ ! -f "$HB_ANDROID_LIB" ]; then
-  echo "[ci_harfbuzz] ERROR: libharfbuzz.a not found at $HB_ANDROID_LIB" >&2
+HB_ANDROID_LIB=$(find "$OUT_DIR/build-android" -name "libharfbuzz.a" -print -quit 2>/dev/null || true)
+if [ -z "$HB_ANDROID_LIB" ]; then
+  echo "[ci_harfbuzz] ERROR: libharfbuzz.a not found in $OUT_DIR/build-android" >&2
   exit 1
 fi
 
@@ -111,9 +111,9 @@ cmake -S "$HARFBUZZ_DIR" -B "$OUT_DIR/build-host" \
 
 cmake --build "$OUT_DIR/build-host" --parallel
 
-HB_HOST_LIB="$OUT_DIR/build-host/src/libharfbuzz.a"
-if [ ! -f "$HB_HOST_LIB" ]; then
-  echo "[ci_harfbuzz] ERROR: host libharfbuzz.a not found at $HB_HOST_LIB" >&2
+HB_HOST_LIB=$(find "$OUT_DIR/build-host" -name "libharfbuzz.a" -print -quit 2>/dev/null || true)
+if [ -z "$HB_HOST_LIB" ]; then
+  echo "[ci_harfbuzz] ERROR: host libharfbuzz.a not found in $OUT_DIR/build-host" >&2
   exit 1
 fi
 
