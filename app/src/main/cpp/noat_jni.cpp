@@ -20,6 +20,8 @@
 
 namespace {
 
+using namespace noat;
+
 // Host-side mirror of the GLSL 'Params' UBO (std140). Field order and types
 // must match shaders/paper_wear.frag and native/paper-headless/main.cpp exactly.
 struct alignas(16) ParamsMirror {
@@ -271,7 +273,7 @@ Java_com_example_noat_PaperLib_paperShapeText(JNIEnv* env, jobject,
 
     ShapedRun run = shape_text_from_asset(g_asset_manager, font_name.c_str(),
                                           utf8.c_str(), static_cast<int32_t>(utf8.size()),
-                                          font_size, direction_str.c_str(),
+                                          fontSize, direction_str.c_str(),
                                           script_str.c_str(), language_str.c_str());
     std::string json = shaped_run_to_json(run);
     return env->NewStringUTF(json.c_str());
