@@ -20,11 +20,13 @@ struct PaperSize {
     float width_mm;
     float height_mm;
 };
+typedef struct PaperSize PaperSize;
 
 struct PaperQuad {
     float qx;
     float qy;
 };
+typedef struct PaperQuad PaperQuad;
 
 struct NoatContextConfig {
     uint32_t width;
@@ -32,6 +34,7 @@ struct NoatContextConfig {
     VkFormat color_format;
     VkFormat depth_format;
 };
+typedef struct NoatContextConfig NoatContextConfig;
 
 struct NoatContext {
     VkInstance instance;
@@ -42,20 +45,24 @@ struct NoatContext {
     VkFormat swapchain_format;
     VkExtent2D extent;
 };
+typedef struct NoatContext NoatContext;
 
 struct NoatRenderPass {
     VkRenderPass handle;
 };
+typedef struct NoatRenderPass NoatRenderPass;
 
 struct NoatPipeline {
     VkPipeline handle;
     VkPipelineLayout layout;
 };
+typedef struct NoatPipeline NoatPipeline;
 
 struct NoatRenderer {
     // Opaque; created via noat_renderer_create.
     void* impl;
 };
+typedef struct NoatRenderer NoatRenderer;
 
 // C API function pointer-compatible declarations (declared here so test files
 // can reference the types; actual symbols are resolved via dlsym).
