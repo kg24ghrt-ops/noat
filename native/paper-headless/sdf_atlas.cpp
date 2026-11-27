@@ -676,6 +676,13 @@ SdfAtlasResult bake_sdf_atlas(const unsigned char* font_data, size_t font_size,
         int h = (int)std::ceil(maxy - miny) + 1;
         if (w < 1) w = 1;
         if (h < 1) h = 1;
+        // Reject absurdly large glyphs (corrupt data, composite transforms, etc.)
+        const int kMaxGlyphDim = 4096;
+        if (w > kMaxGlyphDim || h > kMaxGlyphDim) {
+            gd.w = 0; gd.h = 0;
+            glyphs.push_back(gd);
+            continue;
+        }
         gd.w = w; gd.h = h;
         rasterize_contours(contours, w, h, gd.mask);
         max_w = std::max(max_w, w);
