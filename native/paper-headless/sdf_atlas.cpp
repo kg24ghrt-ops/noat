@@ -618,84 +618,90 @@ SdfAtlasResult bake_sdf_atlas(const unsigned char* font_data, size_t font_size,
         gd.id = gid;
         gd.advance_width = (gid < num_glyphs) ? advance[gid] : 0;
         gd.left_side_bearing = (gid < num_glyphs) ? lsb[gid] : 0;
-        uint32_t off0 = (loca_index_size == 2)
-                            ? rd_u16(loca.data + gid * 2)
-                            : rd_u32(loca.data + gid * 4);
-        uint32_t off1 = (loca_index_size == 2)
-                            ? rd_u16(loca.data + (gid + 1) * 2)
-                            : rd_u32(loca.data + (gid + 1) * 4);
-        if (off1 <= off0 || off1 - off0 > (1u << 20)) {
-            // empty glyph
-            gd.w = 0; gd.h = 0;
-            gd.xMin = gd.yMin = gd.xMax = gd.yMax = 0;
-            glyphs.push_back(gd);
-            continue;
-        }
-        const unsigned char* g = glyf.data + off0;
-        int16_t n_contours = rd_i16(g);
-        std::vector<Contour> contours;
-        bool ok;
-        if (n_contours >= 0) {
-            ok = parse_simple_glyph(g, off1 - off0, scale, 0, 0,
-                                    gd.advance_width, gd.left_side_bearing,
-                                    contours, gd);
-        } else {
-            // composite: no hmtx here; get metrics from root parse separately.
-            ok = parse_glyph_outline(glyf.data, loca.data, loca_index_size,
-                                     num_glyphs, gid, scale, 0, 0, contours, gd, 0);
-        }
-        if (!ok) {
-            gd.w = 0; gd.h = 0;
-            gd.xMin = gd.yMin = gd.xMax = gd.yMax = 0;
-            glyphs.push_back(gd);
-            continue;
-        }
-        // compute bounds
-        double minx = 1e18, miny = 1e18, maxx = -1e18, maxy = -1e18;
-        for (auto& c : contours) {
-            for (auto& pt : c.pts) {
-                minx = std::min(minx, pt.x);
-                miny = std::min(miny, pt.y);
-                maxx = std::max(maxx, pt.x);
-                maxy = std::max(maxy, pt.y);
+        gd.w = 0;
+        gd.h = 0;
+        gd.xMin = gd.yMin = gd.xMax = gd.yMax = 0;
+
+        try {
+            uint32_t off0 = (loca_index_size == 2)
+                                ? rd_u16(loca.data + gid * 2)
+                                : rd_u32(loca.data + gid * 4);
+            uint32_t off1 = (loca_index_size == 2)
+                                ? rd_u16(loca.data + (gid + 1) * 2)
+                                : rd_u32(loca.data + (gid + 1) * 4);
+            if (off1 <= off0 || off1 - off0 > (1u << 20)) {
+                // empty glyph
+                glyphs.push_back(gd);
+                continue;
             }
-        }
-        if (contours.empty()) {
-            gd.w = 0; gd.h = 0;
-            glyphs.push_back(gd);
-            continue;
-        }
-        // image coords: x = (x - minx), y = (maxy - y) [y down]
-        double ox = minx;
-        double oy = maxy;
-        // rebuild with offset applied: shift contours
-        for (auto& c : contours) {
-            for (auto& pt : c.pts) {
-                pt.x -= ox;
-                pt.y = oy - pt.y;
+            const unsigned char* g = glyf.data + off0;
+            int16_t n_contours = rd_i16(g);
+            std::vector<Contour> contours;
+            bool ok;
+            if (n_contours >= 0) {
+                ok = parse_simple_glyph(g, off1 - off0, scale, 0, 0,
+                                        gd.advance_width, gd.left_side_bearing,
+                                        contours, gd);
+            } else {
+                // composite: no hmtx here; get metrics from root parse separately.
+                ok = parse_glyph_outline(glyf.data, loca.data, loca_index_size,
+                                         num_glyphs, gid, scale, 0, 0, contours, gd, 0);
             }
-        }
-        int w = (int)std::ceil(maxx - minx) + 1;
-        int h = (int)std::ceil(maxy - miny) + 1;
-        if (w < 1) w = 1;
-        if (h < 1) h = 1;
-        // Reject absurdly large glyphs (corrupt data, composite transforms, etc.)
-        const int kMaxGlyphDim = 4096;
-        if (w > kMaxGlyphDim || h > kMaxGlyphDim) {
+            if (!ok) {
+                gd.w = 0; gd.h = 0;
+                glyphs.push_back(gd);
+                continue;
+            }
+            // compute bounds
+            double minx = 1e18, miny = 1e18, maxx = -1e18, maxy = -1e18;
+            for (auto& c : contours) {
+                for (auto& pt : c.pts) {
+                    minx = std::min(minx, pt.x);
+                    miny = std::min(miny, pt.y);
+                    maxx = std::max(maxx, pt.x);
+                    maxy = std::max(maxy, pt.y);
+                }
+            }
+            if (contours.empty()) {
+                gd.w = 0; gd.h = 0;
+                glyphs.push_back(gd);
+                continue;
+            }
+            // image coords: x = (x - minx), y = (maxy - y) [y down]
+            double ox = minx;
+            double oy = maxy;
+            // rebuild with offset applied: shift contours
+            for (auto& c : contours) {
+                for (auto& pt : c.pts) {
+                    pt.x -= ox;
+                    pt.y = oy - pt.y;
+                }
+            }
+            int w = (int)std::ceil(maxx - minx) + 1;
+            int h = (int)std::ceil(maxy - miny) + 1;
+            if (w < 1) w = 1;
+            if (h < 1) h = 1;
+            // Reject absurdly large glyphs (corrupt data, composite transforms, etc.)
+            const int kMaxGlyphDim = 4096;
+            if (w > kMaxGlyphDim || h > kMaxGlyphDim) {
+                gd.w = 0; gd.h = 0;
+                glyphs.push_back(gd);
+                continue;
+            }
+            // Reject absurd pixel counts (w*h overflow or too much memory)
+            if ((size_t)w * (size_t)h > (16u * 1024u * 1024u)) {
+                gd.w = 0; gd.h = 0;
+                glyphs.push_back(gd);
+                continue;
+            }
+            gd.w = w; gd.h = h;
+            rasterize_contours(contours, w, h, gd.mask);
+            max_w = std::max(max_w, w);
+            max_h = std::max(max_h, h);
+        } catch (...) {
+            // Skip any glyph that throws during parsing/rasterization
             gd.w = 0; gd.h = 0;
-            glyphs.push_back(gd);
-            continue;
         }
-        // Reject absurd pixel counts (w*h overflow or too much memory)
-        if ((size_t)w * (size_t)h > (16u * 1024u * 1024u)) {
-            gd.w = 0; gd.h = 0;
-            glyphs.push_back(gd);
-            continue;
-        }
-        gd.w = w; gd.h = h;
-        rasterize_contours(contours, w, h, gd.mask);
-        max_w = std::max(max_w, w);
-        max_h = std::max(max_h, h);
         glyphs.push_back(gd);
     }
 
