@@ -82,7 +82,7 @@ typedef VkPipeline (*noat_pipeline_get_handle_fn)(const struct NoatPipeline*);
 
 typedef struct NoatRenderer* (*noat_renderer_create_fn)(void);
 typedef void (*noat_renderer_destroy_fn)(struct NoatRenderer*);
-typedef int (*noat_renderer_init_fn)(struct NoatRenderer*, ANativeWindow*);
+typedef int (*noat_renderer_init_fn)(struct NoatRenderer*, struct ANativeWindow*);
 typedef void (*noat_renderer_resize_fn)(struct NoatRenderer*, int, int);
 typedef void (*noat_renderer_render_frame_fn)(struct NoatRenderer*);
 typedef void (*noat_renderer_shutdown_fn)(struct NoatRenderer*);
