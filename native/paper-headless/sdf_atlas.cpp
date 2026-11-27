@@ -181,7 +181,8 @@ static bool parse_simple_glyph(const unsigned char* glyph_data, uint32_t glyph_l
     if (glyph_len < 10) return false;
     const unsigned char* p = glyph_data;
     int16_t n_contours = rd_i16(p);
-    if (n_contours < 0) return false; // composite handled elsewhere
+        if (n_contours < 0) return false; // composite handled elsewhere
+    if (n_contours > 10000) return false; // sanity: absurd contour count
     p += 2;
     int16_t xMin = rd_i16(p); p += 2;
     int16_t yMin = rd_i16(p); p += 2;
@@ -200,6 +201,7 @@ static bool parse_simple_glyph(const unsigned char* glyph_data, uint32_t glyph_l
     p += instr_len; // skip instructions
 
     int total_points = end_pts.empty() ? 0 : end_pts.back() + 1;
+    if (total_points > 100000) return false; // sanity: absurd point count
     std::vector<uint8_t> flags(total_points);
     std::vector<int16_t> x_coords(total_points), y_coords(total_points);
 
@@ -585,6 +587,7 @@ SdfAtlasResult bake_sdf_atlas(const unsigned char* font_data, size_t font_size,
     int16_t units_per_em = font_units_per_em_override > 0
                                ? (int16_t)font_units_per_em_override
                                : rd_i16(head.data + 18);
+    if (units_per_em <= 0) units_per_em = 1000; // fallback for corrupt fonts
     int16_t index_to_loc_format = rd_i16(head.data + 50);
     int loca_index_size = (index_to_loc_format == 0) ? 2 : 4;
     uint16_t num_hmetrics = rd_u16(hhea.data + 34);
@@ -679,6 +682,12 @@ SdfAtlasResult bake_sdf_atlas(const unsigned char* font_data, size_t font_size,
         // Reject absurdly large glyphs (corrupt data, composite transforms, etc.)
         const int kMaxGlyphDim = 4096;
         if (w > kMaxGlyphDim || h > kMaxGlyphDim) {
+            gd.w = 0; gd.h = 0;
+            glyphs.push_back(gd);
+            continue;
+        }
+        // Reject absurd pixel counts (w*h overflow or too much memory)
+        if ((size_t)w * (size_t)h > (16u * 1024u * 1024u)) {
             gd.w = 0; gd.h = 0;
             glyphs.push_back(gd);
             continue;
