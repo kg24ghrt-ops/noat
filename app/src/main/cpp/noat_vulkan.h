@@ -6,7 +6,9 @@
 // compiles on host Linux (C unit tests) as well as on Android (renderer).
 struct ANativeWindow;
 
+#ifdef __cplusplus
 namespace noat {
+#endif
 
 // C-compatible type declarations exposed via libpaper-engine.so dlsym API.
 // These mirror the C++ AppRenderer concepts but use plain C structs so
@@ -89,4 +91,6 @@ typedef const PaperSize* (*noat_paper_default_size_fn)(void);
 typedef const PaperSize* (*noat_paper_find_size_fn)(const char*);
 typedef void (*noat_paper_compute_quad_fn)(const PaperSize*, float, float, float*, float*);
 
+#ifdef __cplusplus
 } // namespace noat
+#endif
