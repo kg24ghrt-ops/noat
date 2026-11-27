@@ -5,13 +5,17 @@
 
 #include <jni.h>
 
-#include <android/log.h>
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 
 #include "renderer.h"
+#include "text_shaper.h"
+#include "sdf_atlas.h"
 
 #include <cstring>
+#include <sstream>
 #include <vector>
 
 namespace {
@@ -96,6 +100,15 @@ ParamsMirror& params() {
     static ParamsMirror instance;
     return instance;
 }
+
+// Application asset manager, set once from Java via paperSetAssetManager.
+// Used to load bundled font assets for HarfBuzz shaping.
+static AAssetManager* g_asset_manager{nullptr};
+
+// Baked SDF atlas retained between prepare + upload calls.
+static std::vector<uint8_t> g_atlasData;
+static int g_atlasWidth{0};
+static int g_atlasHeight{0};
 
 // Map a PaperSizes id to rule style / gap (college ruled by default).
 void applySizeId(const char* sizeId, ParamsMirror& p) {
@@ -224,6 +237,236 @@ JNIEXPORT void JNICALL
 Java_com_example_noat_PaperLib_paperShutdown(JNIEnv*, jobject) {
     auto& r = renderer();
     r.shutdown();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperSetAssetManager(JNIEnv* env, jobject, jobject assetManager) {
+    g_asset_manager = AAssetManager_fromJava(env, assetManager);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_example_noat_PaperLib_paperShapeText(JNIEnv* env, jobject,
+                                              jstring fontName, jstring text,
+                                              jfloat fontSize,
+                                              jstring direction, jstring script,
+                                              jstring language) {
+    auto get_utf = [&](jstring s) -> std::string {
+        if (!s) return {};
+        const char* c = env->GetStringUTFChars(s, nullptr);
+        std::string out(c ? c : "");
+        if (c) env->ReleaseStringUTFChars(s, c);
+        return out;
+    };
+    std::string font_name = get_utf(fontName);
+    std::string utf8 = get_utf(text);
+    std::string direction = get_utf(direction);
+    if (direction.empty()) direction = "ltr";
+    std::string script = get_utf(script);
+    if (script.empty()) script = "latn";
+    std::string language = get_utf(language);
+    if (language.empty()) language = "en";
+
+    ShapedRun run = shape_text_from_asset(g_asset_manager, font_name.c_str(),
+                                          utf8.c_str(), static_cast<int32_t>(utf8.size()),
+                                          font_size, direction.c_str(),
+                                          script.c_str(), language.c_str());
+    std::string json = shaped_run_to_json(run);
+    return env->NewStringUTF(json.c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_example_noat_PaperLib_paperTextPrepareAtlas(JNIEnv* env, jobject,
+                                                     jintArray glyphIds,
+                                                     jfloat ppem,
+                                                     jint supersample,
+                                                     jstring fontName) {
+    auto get_utf = [&](jstring s) -> std::string {
+        if (!s) return {};
+        const char* c = env->GetStringUTFChars(s, nullptr);
+        std::string out(c ? c : "");
+        if (c) env->ReleaseStringUTFChars(s, c);
+        return out;
+    };
+    std::string font_name = get_utf(fontName);
+    if (font_name.empty()) font_name = "fonts/NotoSansMyanmar-VF.ttf";
+
+    AAssetManager* mgr = g_asset_manager;
+    std::vector<unsigned char> font_data;
+    if (mgr) {
+        AAsset* asset = AAssetManager_open(mgr, font_name.c_str(),
+                                           AASSET_MODE_BUFFER);
+        if (asset) {
+            off_t len = AAsset_getLength(asset);
+            const void* buf = AAsset_getBuffer(asset);
+            if (buf && len > 0) {
+                font_data.assign(static_cast<const unsigned char*>(buf),
+                                 static_cast<const unsigned char*>(buf) +
+                                     (size_t)len);
+            }
+            AAsset_close(asset);
+        }
+    }
+
+    jint* ids = env->GetIntArrayElements(glyphIds, nullptr);
+    jsize n = env->GetArrayLength(glyphIds);
+    std::vector<uint32_t> glyph_ids(n);
+    for (jsize i = 0; i < n; ++i) glyph_ids[i] = (uint32_t)ids[i];
+    env->ReleaseIntArrayElements(glyphIds, ids, JNI_ABORT);
+
+    g_atlasData.clear();
+    g_atlasWidth = 0;
+    g_atlasHeight = 0;
+
+    SdfAtlasResult res = bake_sdf_atlas(font_data.empty() ? nullptr
+                                                          : font_data.data(),
+                                        font_data.size(), glyph_ids,
+                                        (float)ppem, (int)supersample);
+    if (!res.glyphs.empty()) {
+        g_atlasData = std::move(res.atlas_rgba8);
+        g_atlasWidth = res.atlas_width;
+        g_atlasHeight = res.atlas_height;
+    }
+
+    // Meta JSON describing the baked atlas (per-glyph rects for positioning).
+    std::ostringstream meta;
+    meta << "{\"width\":" << g_atlasWidth << ",\"height\":" << g_atlasHeight
+         << ",\"ppem\":" << ppem << ",\"scale\":" << res.scale
+         << ",\"glyphs\":[";
+    for (size_t i = 0; i < res.glyphs.size(); ++i) {
+        const auto& g = res.glyphs[i];
+        meta << "{\"gid\":" << g.glyph_id << ",\"x\":" << g.atlas_x
+             << ",\"y\":" << g.atlas_y << ",\"w\":" << g.atlas_w << ",\"h\":"
+             << g.atlas_h << ",\"advance_x\":" << g.advance_x
+             << ",\"bearing_x\":" << g.bearing_x << "}";
+        if (i + 1 < res.glyphs.size()) meta << ",";
+    }
+    meta << "]}";
+    return env->NewStringUTF(meta.str().c_str());
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextUploadInstances(JNIEnv* env, jobject,
+                                                        jfloatArray instances,
+                                                        jint count) {
+    auto& r = renderer();
+    jsize n = env->GetArrayLength(instances);
+    jfloat* data = env->GetFloatArrayElements(instances, nullptr);
+    std::vector<AppRenderer::GlyphInstance> gi((size_t)count);
+    for (jsize i = 0; i < count && i * 12 < n; ++i) {
+        const jfloat* f = &data[i * 12];
+        gi[i].x = f[0]; gi[i].y = f[1]; gi[i].w = f[2]; gi[i].h = f[3];
+        gi[i].ax = f[4]; gi[i].ay = f[5]; gi[i].aw = f[6]; gi[i].ah = f[7];
+        gi[i].glyph_id = f[8]; gi[i].cluster_id = f[9];
+        gi[i].pad0 = f[10]; gi[i].pad1 = f[11];
+    }
+    env->ReleaseFloatArrayElements(instances, data, JNI_ABORT);
+    r.textUploadInstances(gi.data(), (uint32_t)count);
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextClearInstances(JNIEnv*, jobject) {
+    auto& r = renderer();
+    r.textClearInstances();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextSetAtlas(JNIEnv*, jobject) {
+    auto& r = renderer();
+    if (!g_atlasData.empty() && g_atlasWidth > 0 && g_atlasHeight > 0) {
+        r.textSetAtlas(g_atlasData.data(), g_atlasWidth, g_atlasHeight);
+    }
+}
+
+// ---- Text document editing ----
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextInsert(JNIEnv* env, jobject, jstring text) {
+    auto& r = renderer();
+    if (!text) return;
+    const char* c = env->GetStringUTFChars(text, nullptr);
+    if (c) {
+        r.textInsert(c, static_cast<uint32_t>(strlen(c)));
+        env->ReleaseStringUTFChars(text, c);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextBackspace(JNIEnv*, jobject) {
+    renderer().textBackspace();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextEnter(JNIEnv*, jobject) {
+    renderer().textEnter();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextMoveLeft(JNIEnv*, jobject) {
+    renderer().textMoveLeft();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextMoveRight(JNIEnv*, jobject) {
+    renderer().textMoveRight();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextMoveUp(JNIEnv*, jobject) {
+    renderer().textMoveUp();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextMoveDown(JNIEnv*, jobject) {
+    renderer().textMoveDown();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextMoveToLineStart(JNIEnv*, jobject) {
+    renderer().textMoveToLineStart();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextMoveToLineEnd(JNIEnv*, jobject) {
+    renderer().textMoveToLineEnd();
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextSetCursor(JNIEnv*, jobject, jint cluster_index) {
+    renderer().textSetCursor(static_cast<uint32_t>(cluster_index));
+}
+
+JNIEXPORT jfloat JNICALL
+Java_com_example_noat_PaperLib_paperTextGetCursorX(JNIEnv*, jobject) {
+    return renderer().textCursorX();
+}
+
+JNIEXPORT jfloat JNICALL
+Java_com_example_noat_PaperLib_paperTextGetCursorY(JNIEnv*, jobject) {
+    return renderer().textCursorY();
+}
+
+JNIEXPORT jint JNICALL
+Java_com_example_noat_PaperLib_paperTextGetCursorLine(JNIEnv*, jobject) {
+    return static_cast<jint>(renderer().textCursorLine());
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextSetComposing(JNIEnv* env, jobject, jstring text) {
+    auto& r = renderer();
+    if (!text) {
+        r.textClearComposing();
+        return;
+    }
+    const char* c = env->GetStringUTFChars(text, nullptr);
+    if (c) {
+        r.textSetComposing(c, static_cast<uint32_t>(strlen(c)));
+        env->ReleaseStringUTFChars(text, c);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextClearComposing(JNIEnv*, jobject) {
+    renderer().textClearComposing();
 }
 
 } // extern "C"
