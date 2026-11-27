@@ -1,0 +1,89 @@
+#pragma once
+
+#include <vulkan/vulkan.h>
+#include <android/native_window.h>
+
+namespace noat {
+
+// C-compatible type declarations exposed via libpaper-engine.so dlsym API.
+// These mirror the C++ AppRenderer concepts but use plain C structs so
+// noat_engine_test.c and noat_vulkan_test.c can dlopen/dlsym them.
+
+struct PaperSize {
+    const char* id;
+    const char* name;
+    float width_mm;
+    float height_mm;
+};
+
+struct PaperQuad {
+    float qx;
+    float qy;
+};
+
+struct NoatContextConfig {
+    uint32_t width;
+    uint32_t height;
+    VkFormat color_format;
+    VkFormat depth_format;
+};
+
+struct NoatContext {
+    VkInstance instance;
+    VkPhysicalDevice physical_device;
+    VkDevice device;
+    VkQueue queue;
+    uint32_t queue_family;
+    VkFormat swapchain_format;
+    VkExtent2D extent;
+};
+
+struct NoatRenderPass {
+    VkRenderPass handle;
+};
+
+struct NoatPipeline {
+    VkPipeline handle;
+    VkPipelineLayout layout;
+};
+
+struct NoatRenderer {
+    // Opaque; created via noat_renderer_create.
+    void* impl;
+};
+
+// C API function pointer-compatible declarations (declared here so test files
+// can reference the types; actual symbols are resolved via dlsym).
+typedef NoatContext* (*noat_context_create_fn)(const NoatContextConfig*);
+typedef void (*noat_context_destroy_fn)(NoatContext*);
+typedef VkDevice (*noat_context_get_device_fn)(const NoatContext*);
+typedef VkPhysicalDevice (*noat_context_get_physical_device_fn)(const NoatContext*);
+typedef VkQueue (*noat_context_get_graphics_queue_fn)(const NoatContext*);
+typedef uint32_t (*noat_context_get_graphics_queue_family_fn)(const NoatContext*);
+typedef VkFormat (*noat_context_get_swapchain_format_fn)(const NoatContext*);
+typedef VkExtent2D (*noat_context_get_extent_fn)(const NoatContext*);
+typedef int (*noat_context_get_width_fn)(const NoatContext*);
+typedef int (*noat_context_get_height_fn)(const NoatContext*);
+typedef int (*noat_context_resize_fn)(NoatContext*, int, int);
+
+typedef NoatRenderPass* (*noat_renderpass_create_fn)(VkDevice, VkFormat, VkFormat);
+typedef void (*noat_renderpass_destroy_fn)(NoatRenderPass*);
+typedef VkRenderPass (*noat_renderpass_get_handle_fn)(const NoatRenderPass*);
+
+typedef NoatPipeline* (*noat_pipeline_create_fn)(VkDevice, VkRenderPass,
+                                                   VkExtent2D, VkDescriptorSetLayout);
+typedef void (*noat_pipeline_destroy_fn)(NoatPipeline*);
+typedef VkPipeline (*noat_pipeline_get_handle_fn)(const NoatPipeline*);
+
+typedef NoatRenderer* (*noat_renderer_create_fn)(void);
+typedef void (*noat_renderer_destroy_fn)(NoatRenderer*);
+typedef int (*noat_renderer_init_fn)(NoatRenderer*, ANativeWindow*);
+typedef void (*noat_renderer_resize_fn)(NoatRenderer*, int, int);
+typedef void (*noat_renderer_render_frame_fn)(NoatRenderer*);
+typedef void (*noat_renderer_shutdown_fn)(NoatRenderer*);
+
+typedef const PaperSize* (*noat_paper_default_size_fn)(void);
+typedef const PaperSize* (*noat_paper_find_size_fn)(const char*);
+typedef void (*noat_paper_compute_quad_fn)(const PaperSize*, float, float, float*, float*);
+
+} // namespace noat

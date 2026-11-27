@@ -60,7 +60,6 @@ jobs:
           [ -z "${ANDROID_KEY_PASSWORD}" ] && missing+=("ANDROID_KEY_PASSWORD")
           if [ "${#missing[@]}" -gt 0 ]; then
             if [ "${{ github.event_name }}" = "pull_request" ]; then
-              # Same-repository PR: build unsigned, do not fail.
               echo "Warning: signing secrets missing for same-repository PR; building unsigned: ${missing[*]}"
             else
               echo "Error: Required signing secrets are missing for ${{ github.event_name }}: ${missing[*]}"
@@ -76,7 +75,6 @@ jobs:
         run: |
           if [ -z "${ANDROID_KEYSTORE_BASE64}" ]; then
             if [ "${{ github.event_name }}" = "pull_request" ]; then
-              # Same-repository PR without secrets: build unsigned, do not fail.
               echo "Warning: no signing keystore for same-repository PR; building unsigned."
             else
               echo "Error: ANDROID_KEYSTORE_BASE64 secret is missing for ${{ github.event_name }}."
@@ -89,6 +87,28 @@ jobs:
             echo "Release keystore prepared at $RUNNER_TEMP/noat-release.jks"
           fi
 
+      - name: Build host corrade-rc (required to cross-compile vendored Corrade)
+        run: |
+          cmake -S third_party/corrade -B build/host-corrade \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWITH_INTERCONNECT=OFF \
+            -DWITH_PLUGINMANAGER=OFF \
+            -DWITH_TESTSUITE=OFF \
+            -DWITH_UTILITY=ON \
+            -DWITH_MAIN=OFF \
+            -DWITH_RC=ON \
+            -DBUILD_STATIC=OFF \
+            -DBUILD_STATIC_PIC=OFF \
+            -DBUILD_TESTS=OFF
+          cmake --build build/host-corrade --target corrade-rc
+          CORRADE_RC="$(find build/host-corrade -name corrade-rc -type f | head -n 1)"
+          if [ -z "$CORRADE_RC" ]; then
+            echo "Error: corrade-rc was not built"
+            exit 1
+          fi
+          echo "CORRADE_RC_EXECUTABLE=$CORRADE_RC" >> "$GITHUB_ENV"
+          echo "corrade-rc: $CORRADE_RC"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
@@ -97,6 +117,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          CORRADE_RC_EXECUTABLE: ${{ env.CORRADE_RC_EXECUTABLE }}
         run: ./gradlew --no-daemon testDebugUnitTest assembleDebug assembleRelease
 
       - name: Verify release APK signature
@@ -138,8 +159,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  c-unit-tests:
-    name: Run C unit tests
+  cxx-unit-tests:
+    name: Run C++ unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -147,13 +168,65 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Compile and run C unit tests
+      - name: Set up Android SDK + NDK
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+          packages: >-
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;30.0.16248370
+            cmake;3.31.6
+
+      - name: Install system Vulkan headers (for C unit tests)
+        run: sudo apt-get update -y && sudo apt-get install -y zlib1g-dev libvulkan-dev
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run unit tests and build APKs
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          CORRADE_RC_EXECUTABLE: ${{ env.CORRADE_RC_EXECUTABLE }}
+        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug assembleRelease
+
+      - name: Compile C Vulkan unit tests (verify vulkan.h header resolution)
         run: |
-          clang -Wall -Wextra -Wpedantic -std=c11 \
-            -I app/src/main/cpp/vulkan \
-            app/src/main/cpp/vulkan/noat_paper_geometry.c \
-            tests/test_paper_geometry.c \
-            -o test_paper_geometry -lm
-          echo "=== Running C unit tests ==="
-          ./test_paper_geometry
-          echo "=== C unit tests complete ==="
+          clang -std=c11 -Wall -Wextra -Wpedantic \
+            -I app/src/main/cpp \
+            -I "$ANDROID_NDK_ROOT/source/android/vulkan/include" \
+            tests/noat_vulkan_test.c \
+            -o /tmp/noat_vulkan_test \
+            -lvulkan -ldl -landroid -llog
+          echo "=== noat_vulkan_test.c compiled successfully ==="
+
+          clang -std=c11 -Wall -Wextra -Wpedantic \
+            -I app/src/main/cpp \
+            -I "$ANDROID_NDK_ROOT/source/android/vulkan/include" \
+            tests/noat_engine_test.c \
+            -o /tmp/noat_engine_test \
+            -lvulkan -ldl -landroid -llog
+          echo "=== noat_engine_test.c compiled successfully ==="
+
+      - name: Compile and run PNG/A4 unit test
+        run: |
+          clang++ -Wall -Wextra -Wpedantic -std=c++17 \
+            -I app/src/main/cpp \
+            app/src/main/cpp/png_codec.cpp \
+            tests/noat_png_test.cpp \
+            -o noat_png_test -lz
+          echo "=== Running PNG/A4 unit tests ==="
+          ./noat_png_test > noat_png_report.json
+          cat noat_png_report.json
+          echo "=== C++ unit tests complete ==="
+
+      - name: Upload JSON test report
+        uses: actions/upload-artifact@v6
+        with:
+          name: noat-cxx-test-report
+          path: noat_png_report.json
+          retention-days: 14
