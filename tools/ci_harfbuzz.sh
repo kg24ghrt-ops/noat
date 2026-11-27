@@ -64,6 +64,7 @@ echo "[ci_harfbuzz] configuring HarfBuzz for Android arm64"
 cmake -S "$HARFBUZZ_DIR" -B "$OUT_DIR/build-android" \
   -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
   -DANDROID_ABI=arm64-v8a \
+  -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
   -DANDROID_PLATFORM=android-29 \
   -DCMAKE_BUILD_TYPE=Release \
   -DHB_BUILD_TESTS=OFF \
