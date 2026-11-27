@@ -52,9 +52,9 @@ HARFBUZZ_DIR="$(cd "$HARFBUZZ_DIR" && pwd)"
 SRC_DIR="$HARFBUZZ_DIR/src"
 
 # ---- Toolchain ----
-TOOLCHAIN_PREFIX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31"
-CLANG="$TOOLCHAIN_PREFIX-clang"
+CLANG="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
 LLVM_AR="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+GCC_TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
 
 # ---- Generate hb-version.h (normally done by meson/gen-hb-version.py) ----
 mkdir -p "$HARFBUZZ_DIR/build-android/src"
@@ -107,6 +107,7 @@ for src in "${SRC_FILES[@]}"; do
     bn=$(basename "$src" .cc)
     obj="$OBJ_DIR/$bn.o"
     "$CLANG" --target=aarch64-linux-android31 \
+        --gcc-toolchain="$GCC_TOOLCHAIN" \
         $INCLUDES \
         -O2 -DNDEBUG -Wno-error -c "$src" -o "$obj" 2>&1 | tail -5
     if [ ! -f "$obj" ]; then
