@@ -56,14 +56,29 @@ if ! command -v meson >/dev/null 2>&1 || ! command -v ninja >/dev/null 2>&1; the
   echo "[ci_harfbuzz] Installing meson/ninja"
   pip3 install --quiet meson ninja
 fi
-
 # ---- Build for Android arm64 ----
 echo "[ci_harfbuzz] configuring HarfBuzz for Android arm64 (Meson)"
+
+# Create clang wrapper that forces --target=aarch64-linux-android31.
+# Meson cross-file c_args don't reliably reach the compiler invocation,
+# so we wrap clang to inject --target on every call.
+CLANG_WRAPPER="$OUT_DIR/clang-aarch64.sh"
+CLANGPP_WRAPPER="$OUT_DIR/clang++-aarch64.sh"
+cat > "$CLANG_WRAPPER" << WRAPPER_EOF
+#!/bin/bash
+exec '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang' --target=aarch64-linux-android31 "\$@"
+WRAPPER_EOF
+cat > "$CLANGPP_WRAPPER" << WRAPPER_EOF
+#!/bin/bash
+exec '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++' --target=aarch64-linux-android31 "\$@"
+WRAPPER_EOF
+chmod +x "$CLANG_WRAPPER" "$CLANGPP_WRAPPER"
+
 ANDROID_CROSS_FILE="$OUT_DIR/android-arm64-cross.txt"
 cat > "$ANDROID_CROSS_FILE" << CROSS_EOF
 [binaries]
-c = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang'
-cpp = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++'
+c = '$CLANG_WRAPPER'
+cpp = '$CLANGPP_WRAPPER'
 ar = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
 strip = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
 pkgconfig = 'false'
@@ -71,10 +86,6 @@ pkgconfig = 'false'
 [properties]
 sys_root = '$NDK/platforms/android-31/arch-arm64'
 skip_sanity_check = true
-c_args = ['--target=aarch64-linux-android31']
-cpp_args = ['--target=aarch64-linux-android31']
-c_link_args = ['--target=aarch64-linux-android31']
-cpp_link_args = ['--target=aarch64-linux-android31']
 
 [host_machine]
 system = 'android'
