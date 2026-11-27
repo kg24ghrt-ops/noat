@@ -262,17 +262,17 @@ Java_com_example_noat_PaperLib_paperShapeText(JNIEnv* env, jobject,
     };
     std::string font_name = get_utf(fontName);
     std::string utf8 = get_utf(text);
-    std::string direction = get_utf(direction);
-    if (direction.empty()) direction = "ltr";
-    std::string script = get_utf(script);
-    if (script.empty()) script = "latn";
-    std::string language = get_utf(language);
-    if (language.empty()) language = "en";
+    std::string direction_str = get_utf(direction);
+    if (direction_str.empty()) direction_str = "ltr";
+    std::string script_str = get_utf(script);
+    if (script_str.empty()) script_str = "latn";
+    std::string language_str = get_utf(language);
+    if (language_str.empty()) language_str = "en";
 
     ShapedRun run = shape_text_from_asset(g_asset_manager, font_name.c_str(),
                                           utf8.c_str(), static_cast<int32_t>(utf8.size()),
-                                          font_size, direction.c_str(),
-                                          script.c_str(), language.c_str());
+                                          font_size, direction_str.c_str(),
+                                          script_str.c_str(), language_str.c_str());
     std::string json = shaped_run_to_json(run);
     return env->NewStringUTF(json.c_str());
 }
