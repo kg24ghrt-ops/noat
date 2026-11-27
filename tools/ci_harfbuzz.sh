@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# tools/ci_harfbuzz.sh - Build HarfBuzz for Android arm64 (native) using CMake
-# CMake build avoids Meson's cross-compilation sanity check (which tries to
-# execute ARM64 binaries on the x86_64 host).
+# tools/ci_harfbuzz.sh - Build HarfBuzz for Android arm64 (native) and host
+# Uses Meson with skip_sanity_check to avoid cross-compile host execution.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,11 +18,7 @@ if [ -z "$NDK" ] || [ ! -d "$NDK" ]; then
 fi
 echo "[ci_harfbuzz] NDK: $NDK"
 
-TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake"
-if [ ! -f "$TOOLCHAIN_FILE" ]; then
-  echo "[ci_harfbuzz] ERROR: NDK toolchain file not found at $TOOLCHAIN_FILE" >&2
-  exit 1
-fi
+TOOLCHAIN_PREFIX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31"
 
 HARFBUZZ_VERSION="8.4.0"
 HARFBUZZ_TARBALL="$OUT_DIR/harfbuzz-$HARFBUZZ_VERSION.tar.xz"
@@ -34,7 +29,6 @@ if [ ! -d "$HARFBUZZ_DIR" ]; then
   curl -fsSL --retry 3 -o "$HARFBUZZ_TARBALL" \
     "https://github.com/harfbuzz/harfbuzz/releases/download/$HARFBUZZ_VERSION/harfbuzz-$HARFBUZZ_VERSION.tar.xz"
 
-  # Verify the download is a valid tar.xz (not an HTML error page)
   if ! head -c 2 "$HARFBUZZ_TARBALL" | od -An -tx1 | grep -q 'fd 37'; then
     echo "[ci_harfbuzz] ERROR: downloaded file is not a valid xz archive" >&2
     head -c 200 "$HARFBUZZ_TARBALL" >&2 || true
@@ -45,47 +39,63 @@ if [ ! -d "$HARFBUZZ_DIR" ]; then
   tar -xf "$HARFBUZZ_TARBALL" -C "$OUT_DIR"
 fi
 
-# Verify CMakeLists.txt exists
-if [ ! -f "$HARFBUZZ_DIR/CMakeLists.txt" ]; then
-  FOUND_DIR=$(find "$OUT_DIR" -maxdepth 4 -name CMakeLists.txt -print -quit 2>/dev/null | xargs -I{} dirname {} 2>/dev/null || true)
+if [ ! -f "$HARFBUZZ_DIR/meson.build" ]; then
+  FOUND_DIR=$(find "$OUT_DIR" -maxdepth 4 -name meson.build -print -quit 2>/dev/null | xargs -I{} dirname {} 2>/dev/null || true)
   if [ -z "$FOUND_DIR" ]; then
-    echo "[ci_harfbuzz] ERROR: cannot find CMakeLists.txt under $OUT_DIR" >&2
+    echo "[ci_harfbuzz] ERROR: cannot find meson.build under $OUT_DIR" >&2
     exit 1
   fi
-  echo "[ci_harfbuzz] found CMake source at $FOUND_DIR (expected $HARFBUZZ_DIR)"
+  echo "[ci_harfbuzz] found meson source at $FOUND_DIR (expected $HARFBUZZ_DIR)"
   HARFBUZZ_DIR="$FOUND_DIR"
 fi
 
-# Make HARFBUZZ_DIR absolute
 HARFBUZZ_DIR="$(cd "$HARFBUZZ_DIR" && pwd)"
 
+# Install meson/ninja if needed
+if ! command -v meson >/dev/null 2>&1 || ! command -v ninja >/dev/null 2>&1; then
+  echo "[ci_harfbuzz] Installing meson/ninja"
+  pip3 install --quiet meson ninja
+fi
+
 # ---- Build for Android arm64 ----
-echo "[ci_harfbuzz] configuring HarfBuzz for Android arm64"
-cmake -S "$HARFBUZZ_DIR" -B "$OUT_DIR/build-android" \
-  -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
-  -DANDROID_ABI=arm64-v8a \
-  -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-  -DANDROID_PLATFORM=android-29 \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DHB_BUILD_TESTS=OFF \
-  -DHB_BUILD_UTILS=OFF \
-  -DHB_HAVE_FREETYPE=OFF \
-  -DHB_HAVE_GLIB=OFF \
-  -DHB_HAVE_ICU=OFF \
-  -DHB_HAVE_CORETEXT=OFF \
-  -DCMAKE_C_COMPILER_TARGET=aarch64-linux-android31 \
-  -DCMAKE_CXX_COMPILER_TARGET=aarch64-linux-android31 \
-  -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
-  -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-  -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
-  2>&1 | tail -n 20
+echo "[ci_harfbuzz] configuring HarfBuzz for Android arm64 (Meson)"
+ANDROID_CROSS_FILE="$OUT_DIR/android-arm64-cross.txt"
+cat > "$ANDROID_CROSS_FILE" << CROSS_EOF
+[binaries]
+c = '$TOOLCHAIN_PREFIX-clang'
+cpp = '$TOOLCHAIN_PREFIX-clang++'
+ar = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+strip = '$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+pkgconfig = 'false'
 
-echo "[ci_harfbuzz] building HarfBuzz"
-cmake --build "$OUT_DIR/build-android" --parallel
+[properties]
+sys_root = '$NDK/platforms/android-31/arch-arm64'
+skip_sanity_check = true
 
-HB_ANDROID_LIB=$(find "$OUT_DIR/build-android" -name "libharfbuzz.a" -print -quit 2>/dev/null || true)
+[host_machine]
+system = 'android'
+cpu = 'aarch64'
+cpu_family = 'aarch64'
+endian = 'little'
+CROSS_EOF
+
+BUILD_DIR="$OUT_DIR/build-android"
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
+
+cd "$BUILD_DIR"
+meson setup "$HARFBUZZ_DIR" \
+  --cross-file="$ANDROID_CROSS_FILE" \
+  --buildtype=release \
+  -Ddefault_library=static \
+  -Dicu=disabled \
+  -Dtests=disabled
+
+meson compile -C "$BUILD_DIR" harfbuzz -j"$(nproc)"
+
+HB_ANDROID_LIB=$(find "$BUILD_DIR" -name "libharfbuzz.a" -print -quit 2>/dev/null || true)
 if [ -z "$HB_ANDROID_LIB" ]; then
-  echo "[ci_harfbuzz] ERROR: libharfbuzz.a not found in $OUT_DIR/build-android" >&2
+  echo "[ci_harfbuzz] ERROR: libharfbuzz.a not found in $BUILD_DIR" >&2
   exit 1
 fi
 
@@ -94,21 +104,22 @@ echo "[ci_harfbuzz] wrote $OUT_DIR/libharfbuzz-android-arm64.a"
 
 # ---- Build for host (for shaping tool verification) ----
 echo "[ci_harfbuzz] configuring HarfBuzz for host"
-cmake -S "$HARFBUZZ_DIR" -B "$OUT_DIR/build-host" \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DHB_BUILD_TESTS=OFF \
-  -DHB_BUILD_UTILS=OFF \
-  -DHB_HAVE_FREETYPE=OFF \
-  -DHB_HAVE_GLIB=OFF \
-  -DHB_HAVE_ICU=OFF \
-  -DHB_HAVE_CORETEXT=OFF \
-  2>&1 | tail -n 20
+HOST_BUILD_DIR="$OUT_DIR/build-host"
+rm -rf "$HOST_BUILD_DIR"
+mkdir -p "$HOST_BUILD_DIR"
 
-cmake --build "$OUT_DIR/build-host" --parallel
+cd "$HOST_BUILD_DIR"
+meson setup "$HARFBUZZ_DIR" \
+  --buildtype=release \
+  -Ddefault_library=static \
+  -Dicu=disabled \
+  -Dtests=disabled
 
-HB_HOST_LIB=$(find "$OUT_DIR/build-host" -name "libharfbuzz.a" -print -quit 2>/dev/null || true)
+meson compile -C "$HOST_BUILD_DIR" harfbuzz -j"$(nproc)"
+
+HB_HOST_LIB=$(find "$HOST_BUILD_DIR" -name "libharfbuzz.a" -print -quit 2>/dev/null || true)
 if [ -z "$HB_HOST_LIB" ]; then
-  echo "[ci_harfbuzz] ERROR: host libharfbuzz.a not found in $OUT_DIR/build-host" >&2
+  echo "[ci_harfbuzz] ERROR: host libharfbuzz.a not found in $HOST_BUILD_DIR" >&2
   exit 1
 fi
 
