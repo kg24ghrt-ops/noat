@@ -465,6 +465,15 @@ bool AppRenderer::createRenderResourcesOnce() {
         return false;
     }
 
+    // Create fence for one-time submits (used by textSetAtlas during init).
+    VkFenceCreateInfo fci = {};
+    fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    if (vkCreateFence(m_device, &fci, nullptr, &m_inFlightFence) != VK_SUCCESS) {
+        logE("vkCreateFence failed");
+        return false;
+    }
+
     if (!createTextPipeline()) {
         logE("createTextPipeline failed");
         return false;
@@ -1265,12 +1274,18 @@ bool AppRenderer::createSwapchain() {
 bool AppRenderer::createSyncObjects() {
     VkSemaphoreCreateInfo sci = {};
     sci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    VkFenceCreateInfo fci = {};
-    fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    // Fence is created earlier in createRenderResourcesOnce; only create if missing.
+    if (m_inFlightFence == VK_NULL_HANDLE) {
+        VkFenceCreateInfo fci = {};
+        fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        if (vkCreateFence(m_device, &fci, nullptr, &m_inFlightFence) != VK_SUCCESS) {
+            logE("vkCreateFence failed");
+            return false;
+        }
+    }
     if (vkCreateSemaphore(m_device, &sci, nullptr, &m_imageAvailableSemaphore) != VK_SUCCESS ||
-        vkCreateSemaphore(m_device, &sci, nullptr, &m_renderFinishedSemaphore) != VK_SUCCESS ||
-        vkCreateFence(m_device, &fci, nullptr, &m_inFlightFence) != VK_SUCCESS) {
+        vkCreateSemaphore(m_device, &sci, nullptr, &m_renderFinishedSemaphore) != VK_SUCCESS) {
         logE("sync object creation failed");
         return false;
     }
