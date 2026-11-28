@@ -103,14 +103,6 @@ ParamsMirror& params() {
     return instance;
 }
 
-// Application asset manager, set once from Java via paperSetAssetManager.
-// Used to load bundled font assets for HarfBuzz shaping.
-static AAssetManager* g_asset_manager{nullptr};
-
-// Baked SDF atlas retained between prepare + upload calls.
-static std::vector<uint8_t> g_atlasData;
-static int g_atlasWidth{0};
-static int g_atlasHeight{0};
 
 // Map a PaperSizes id to rule style / gap (college ruled by default).
 void applySizeId(const char* sizeId, ParamsMirror& p) {
@@ -140,6 +132,17 @@ void applySizeId(const char* sizeId, ParamsMirror& p) {
         p.paper_size_mm_y = 355.6f;
     }
 }
+
+
+// Global variables accessible to JNI functions (outside anonymous namespace).
+// Application asset manager, set once from Java via paperSetAssetManager.
+// Used to load bundled font assets for HarfBuzz shaping.
+static AAssetManager* g_asset_manager{nullptr};
+
+// Baked SDF atlas retained between prepare + upload calls.
+static std::vector<uint8_t> g_atlasData;
+static int g_atlasWidth{0};
+static int g_atlasHeight{0};
 
 
 // Flush host params to the VMA uniform buffer.

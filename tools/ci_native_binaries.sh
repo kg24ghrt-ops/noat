@@ -28,6 +28,40 @@ fi
 SOURCE_COMMIT="$(git rev-parse HEAD)"
 echo "[ci_native_binaries] Source commit: $SOURCE_COMMIT"
 
+# Required JNI exports from PaperLib.kt (must match exactly).
+REQUIRED_JNI_EXPORTS=(
+  "Java_com_example_noat_PaperLib_paperInitWithSurface"
+  "Java_com_example_noat_PaperLib_paperSetQuality"
+  "Java_com_example_noat_PaperLib_paperSetLight"
+  "Java_com_example_noat_PaperLib_paperSetMaterial"
+  "Java_com_example_noat_PaperLib_paperSetSize"
+  "Java_com_example_noat_PaperLib_paperSetAssetManager"
+  "Java_com_example_noat_PaperLib_paperShapeText"
+  "Java_com_example_noat_PaperLib_paperTextPrepareAtlas"
+  "Java_com_example_noat_PaperLib_paperTextSetAtlas"
+  "Java_com_example_noat_PaperLib_paperTextUploadInstances"
+  "Java_com_example_noat_PaperLib_paperTextClearInstances"
+  "Java_com_example_noat_PaperLib_paperResize"
+  "Java_com_example_noat_PaperLib_paperRenderFrame"
+  "Java_com_example_noat_PaperLib_paperGetInfo"
+  "Java_com_example_noat_PaperLib_paperShutdown"
+  "Java_com_example_noat_PaperLib_paperTextInsert"
+  "Java_com_example_noat_PaperLib_paperTextBackspace"
+  "Java_com_example_noat_PaperLib_paperTextEnter"
+  "Java_com_example_noat_PaperLib_paperTextMoveLeft"
+  "Java_com_example_noat_PaperLib_paperTextMoveRight"
+  "Java_com_example_noat_PaperLib_paperTextMoveUp"
+  "Java_com_example_noat_PaperLib_paperTextMoveDown"
+  "Java_com_example_noat_PaperLib_paperTextMoveToLineStart"
+  "Java_com_example_noat_PaperLib_paperTextMoveToLineEnd"
+  "Java_com_example_noat_PaperLib_paperTextSetCursor"
+  "Java_com_example_noat_PaperLib_paperTextGetCursorX"
+  "Java_com_example_noat_PaperLib_paperTextGetCursorY"
+  "Java_com_example_noat_PaperLib_paperTextGetCursorLine"
+  "Java_com_example_noat_PaperLib_paperTextSetComposing"
+  "Java_com_example_noat_PaperLib_paperTextClearComposing"
+)
+
 # Metadata output.
 METADATA_FILE="$OUT_DIR/binaries-metadata.json"
 echo "{" > "$METADATA_FILE"
@@ -74,9 +108,27 @@ for ABI in arm64-v8a x86_64; do
   # Strip debug symbols.
   strip --strip-all "$SO_FILE" 2>/dev/null || true
 
-  # Validate JNI exports.
+  # Validate JNI exports - check dynamic symbol table after stripping.
   echo "[ci_native_binaries] Validating JNI exports for $ABI:"
-  $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm --defined-only "$SO_FILE" | grep -i "Java_" | head -20 || true
+  LLVM_NM="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+  DYN_SYMS="$("$LLVM_NM" --defined-only "$SO_FILE" | grep "Java_com_example_noat_PaperLib_" || true)"
+
+  # Print all found JNI exports.
+  echo "$DYN_SYMS" | sed 's/^/  /'
+
+  # Verify each required export exists in dynamic symbol table.
+  MISSING=0
+  for sym in "${REQUIRED_JNI_EXPORTS[@]}"; do
+    if ! echo "$DYN_SYMS" | grep -q "^[0-9a-fA-F]* T $sym$"; then
+      echo "[ci_native_binaries] ERROR: Missing required JNI export: $sym" >&2
+      MISSING=1
+    fi
+  done
+  if [ "$MISSING" -ne 0 ]; then
+    echo "[ci_native_binaries] FAIL: One or more required JNI exports missing for $ABI" >&2
+    exit 1
+  fi
+  echo "[ci_native_binaries] All required JNI exports verified for $ABI"
 
   # Compute SHA-256.
   SHA256="$(sha256sum "$SO_FILE" | awk '{print $1}')"

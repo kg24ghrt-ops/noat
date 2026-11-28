@@ -11,6 +11,10 @@ if [ ! -f gradlew ]; then
 fi
 
 echo "[ci_apk] assembling debug APK"
+
+# Fetch pinned font assets in CI only (bundled into the APK via assets/).
+bash "$REPO_ROOT/tools/ci_fonts.sh"
+
 ./gradlew --no-daemon assembleDebug
 
 OUT_DIR="ci-out/apk"
