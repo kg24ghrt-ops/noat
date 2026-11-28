@@ -19,7 +19,7 @@
 
     <!-- IME input target: hidden EditText that receives keyboard input.
          Forwarded to PaperLib text document. Not visible to user. -->
-    <EditText
+    <com.example.noat.PaperEditText
         android:id="@+id/ime_input"
         android:layout_width="0dp"
         android:layout_height="0dp"

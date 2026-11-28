@@ -5,11 +5,13 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
+import android.util.AttributeSet
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import android.view.Choreographer
 import android.view.Surface
@@ -24,7 +26,27 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.example.noat.R
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.text.Regex
+
+// Custom EditText that provides our custom InputConnection.
+class PaperEditText @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+    defStyleAttr: Int = android.R.attr.editTextStyle
+) : EditText(context, attrs, defStyleAttr) {
+
+    private var customInputConnection: InputConnection? = null
+
+    fun setCustomInputConnection(connection: InputConnection?) {
+        customInputConnection = connection
+    }
+
+    override fun onCreateInputConnection(editorInfo: EditorInfo): InputConnection {
+        return customInputConnection ?: super.onCreateInputConnection(editorInfo)
+    }
+}
 
 class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
 
@@ -111,9 +133,9 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         imeInput.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_IME_MULTI_LINE
         imeInput.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
         
-        // Replace default InputConnection with our custom one.
+        // Set our custom InputConnection.
         val customInputConnection = PaperInputConnection(imeInput, false)
-        imeInput.setOnCreateInputConnectionListener { customInputConnection }
+        imeInput.setCustomInputConnection(customInputConnection)
         
         imeInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE ||
