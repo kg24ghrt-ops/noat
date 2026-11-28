@@ -72,11 +72,46 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  native-binaries:
+    name: Native binaries (libpaper-engine.so for APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: []
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Android SDK + NDK
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-sdk-licenses: true
+          packages: >-
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;30.0.16248370
+            cmake;3.31.6
+
+      - name: Build native binaries
+        run: bash tools/ci_native_binaries.sh
+        env:
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_ROOT }}
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: libpaper-engine-binaries
+          path: |
+            ci-out/native-binaries/jniLibs/**/*.so
+            ci-out/native-binaries/binaries-metadata.json
+          if-no-files-found: error
+          retention-days: 30
+
   apk:
     name: APK lane (assembleDebug)
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    needs: []
+    needs: [native-binaries]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -101,8 +136,144 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Download native binaries
+        uses: actions/download-artifact@v6
+        with:
+          name: libpaper-engine-binaries
+          path: ci-out/native-binaries
+
+      - name: Copy native libraries to jniLibs
+        run: |
+          mkdir -p app/src/main/jniLibs
+          cp -r ci-out/native-binaries/jniLibs/* app/src/main/jniLibs/
+          ls -laR app/src/main/jniLibs/
+
+      - name: Verify JNI exports in packaged libraries
+        run: |
+          NDK_ROOT="${ANDROID_NDK_ROOT}"
+          LLVM_NM="${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          REQUIRED_EXPORTS=(
+            "Java_com_example_noat_PaperLib_paperInitWithSurface"
+            "Java_com_example_noat_PaperLib_paperSetQuality"
+            "Java_com_example_noat_PaperLib_paperSetLight"
+            "Java_com_example_noat_PaperLib_paperSetMaterial"
+            "Java_com_example_noat_PaperLib_paperSetSize"
+            "Java_com_example_noat_PaperLib_paperSetAssetManager"
+            "Java_com_example_noat_PaperLib_paperShapeText"
+            "Java_com_example_noat_PaperLib_paperTextPrepareAtlas"
+            "Java_com_example_noat_PaperLib_paperTextSetAtlas"
+            "Java_com_example_noat_PaperLib_paperTextUploadInstances"
+            "Java_com_example_noat_PaperLib_paperTextClearInstances"
+            "Java_com_example_noat_PaperLib_paperResize"
+            "Java_com_example_noat_PaperLib_paperRenderFrame"
+            "Java_com_example_noat_PaperLib_paperGetInfo"
+            "Java_com_example_noat_PaperLib_paperShutdown"
+            "Java_com_example_noat_PaperLib_paperTextInsert"
+            "Java_com_example_noat_PaperLib_paperTextBackspace"
+            "Java_com_example_noat_PaperLib_paperTextEnter"
+            "Java_com_example_noat_PaperLib_paperTextMoveLeft"
+            "Java_com_example_noat_PaperLib_paperTextMoveRight"
+            "Java_com_example_noat_PaperLib_paperTextMoveUp"
+            "Java_com_example_noat_PaperLib_paperTextMoveDown"
+            "Java_com_example_noat_PaperLib_paperTextMoveToLineStart"
+            "Java_com_example_noat_PaperLib_paperTextMoveToLineEnd"
+            "Java_com_example_noat_PaperLib_paperTextSetCursor"
+            "Java_com_example_noat_PaperLib_paperTextGetCursorX"
+            "Java_com_example_noat_PaperLib_paperTextGetCursorY"
+            "Java_com_example_noat_PaperLib_paperTextGetCursorLine"
+            "Java_com_example_noat_PaperLib_paperTextSetComposing"
+            "Java_com_example_noat_PaperLib_paperTextClearComposing"
+          )
+          for so in app/src/main/jniLibs/*/libpaper-engine.so; do
+            echo "=== Checking $so ==="
+            DYN_SYMS="$("$LLVM_NM" --defined-only "$so" | grep "Java_com_example_noat_PaperLib_" || true)"
+            echo "$DYN_SYMS" | sed 's/^/  /'
+            MISSING=0
+            for sym in "${REQUIRED_EXPORTS[@]}"; do
+              if ! echo "$DYN_SYMS" | grep -q "^[0-9a-fA-F]* T $sym$"; then
+                echo "ERROR: Missing required JNI export: $sym in $so"
+                MISSING=1
+              fi
+            done
+            if [ "$MISSING" -ne 0 ]; then
+              exit 1
+            fi
+            echo "All required JNI exports verified for $so"
+          done
+
       - name: Run apk lane
         run: bash tools/ci_apk.sh
+
+      - name: Verify APK contents
+        run: |
+          APK_FILE=$(find ci-out/apk/debug -name "*.apk" | head -1)
+          echo "APK: $APK_FILE"
+          unzip -l "$APK_FILE" | grep libpaper-engine.so
+          # Extract and verify
+          mkdir -p /tmp/apk-verify
+          unzip -o "$APK_FILE" "lib/arm64-v8a/libpaper-engine.so" -d /tmp/apk-verify/
+          NDK_ROOT="${ANDROID_NDK_ROOT}"
+          LLVM_NM="${NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          REQUIRED_EXPORTS=(
+            "Java_com_example_noat_PaperLib_paperInitWithSurface"
+            "Java_com_example_noat_PaperLib_paperSetQuality"
+            "Java_com_example_noat_PaperLib_paperSetLight"
+            "Java_com_example_noat_PaperLib_paperSetMaterial"
+            "Java_com_example_noat_PaperLib_paperSetSize"
+            "Java_com_example_noat_PaperLib_paperSetAssetManager"
+            "Java_com_example_noat_PaperLib_paperShapeText"
+            "Java_com_example_noat_PaperLib_paperTextPrepareAtlas"
+            "Java_com_example_noat_PaperLib_paperTextSetAtlas"
+            "Java_com_example_noat_PaperLib_paperTextUploadInstances"
+            "Java_com_example_noat_PaperLib_paperTextClearInstances"
+            "Java_com_example_noat_PaperLib_paperResize"
+            "Java_com_example_noat_PaperLib_paperRenderFrame"
+            "Java_com_example_noat_PaperLib_paperGetInfo"
+            "Java_com_example_noat_PaperLib_paperShutdown"
+            "Java_com_example_noat_PaperLib_paperTextInsert"
+            "Java_com_example_noat_PaperLib_paperTextBackspace"
+            "Java_com_example_noat_PaperLib_paperTextEnter"
+            "Java_com_example_noat_PaperLib_paperTextMoveLeft"
+            "Java_com_example_noat_PaperLib_paperTextMoveRight"
+            "Java_com_example_noat_PaperLib_paperTextMoveUp"
+            "Java_com_example_noat_PaperLib_paperTextMoveDown"
+            "Java_com_example_noat_PaperLib_paperTextMoveToLineStart"
+            "Java_com_example_noat_PaperLib_paperTextMoveToLineEnd"
+            "Java_com_example_noat_PaperLib_paperTextSetCursor"
+            "Java_com_example_noat_PaperLib_paperTextGetCursorX"
+            "Java_com_example_noat_PaperLib_paperTextGetCursorY"
+            "Java_com_example_noat_PaperLib_paperTextGetCursorLine"
+            "Java_com_example_noat_PaperLib_paperTextSetComposing"
+            "Java_com_example_noat_PaperLib_paperTextClearComposing"
+          )
+          DYN_SYMS="$("$LLVM_NM" --defined-only /tmp/apk-verify/lib/arm64-v8a/libpaper-engine.so | grep "Java_com_example_noat_PaperLib_" || true)"
+          echo "$DYN_SYMS" | sed 's/^/  /'
+          MISSING=0
+          for sym in "${REQUIRED_EXPORTS[@]}"; do
+            if ! echo "$DYN_SYMS" | grep -q "^[0-9a-fA-F]* T $sym$"; then
+              echo "ERROR: Missing required JNI export: $sym in APK"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" -ne 0 ]; then
+            exit 1
+          fi
+          echo "All required JNI exports verified in APK"
+          # Compare SHA-256 with native-binaries metadata
+          echo "Verifying SHA-256 provenance..."
+          cat ci-out/native-binaries/binaries-metadata.json
+          APK_SO_SHA256=$(sha256sum /tmp/apk-verify/lib/arm64-v8a/libpaper-engine.so | awk '{print $1}')
+          echo "APK libpaper-engine.so SHA-256: $APK_SO_SHA256"
+          METADATA_SHA256=$(jq -r '.binaries[] | select(.abi=="arm64-v8a") | .sha256' ci-out/native-binaries/binaries-metadata.json)
+          echo "Metadata SHA-256: $METADATA_SHA256"
+          if [ "$APK_SO_SHA256" != "$METADATA_SHA256" ]; then
+            echo "ERROR: SHA-256 mismatch between APK and native-binaries metadata"
+            exit 1
+          fi
+          echo "SHA-256 provenance verified: APK binary matches native-binaries artifact"
 
       - name: Upload APK
         uses: actions/upload-artifact@v6
