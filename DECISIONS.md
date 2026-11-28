@@ -172,4 +172,72 @@ CI-verified: `--info` reports `"shaping": "harfbuzz"`.
 - Idle GPU work near zero.
 - No per-keystroke allocations.
 
+---
+
+## Phase 7.2 — Android App Shell Integration
+
+### Architecture: Kotlin Shell + C++ Native Renderer + Raw Vulkan
+- Kotlin `MainActivity` owns the Android UI lifecycle, IME input, and Choreographer render loop.
+- C++ `AppRenderer` owns Vulkan, VMA, pipeline, descriptor sets, and GPU resource management.
+- No WebView, no Canvas, no engine abstraction. Raw Vulkan GLSL shaders are the product.
+- Reuses Phase 7 implementations: `shape_run.h/.cpp`, `sdf_atlas.h/.cpp`, `paper_content_final.frag`.
+
+### IME Integration: Hidden EditText as Input Target
+- `SurfaceView` is focusable; on tap, requests focus and shows soft input.
+- Hidden `EditText` (`ime_input`) is the IME input connection target.
+- `TextWatcher` forwards committed text to `PaperLib.paperTextInsert()`.
+- IME action (Enter/Done) maps to `paperTextEnter()`.
+- Backspace handled natively by EditText; forwarded to `paperTextBackspace()`.
+- Composing text (uncommitted) stored in `TextDocument` separately; NOT deformed.
+- Committed text receives deterministic handwriting deformation.
+
+### Text Document Model: Grapheme-Cluster-Aware
+- UTF-8 stored; grapheme cluster segmentation (UAX #29 simplified).
+- Myanmar stacks/medials/vowel signs/kinzi kept as single clusters.
+- Cursor operations (left/right/up/down/line-start/line-end) operate on cluster boundaries.
+- Backspace deletes the cluster before cursor; never strands a mark.
+- Enter splits logical line at cursor.
+- `TextDocument` lives in C++ renderer; Kotlin layer maintains mirror for JNI round-trips.
+
+### Ruled-Line Layout
+- One logical text line per ruled baseline.
+- Baseline snapping: text sits on ruled line, not arbitrary Y.
+- Left/right margin constraints from paper geometry.
+- Word wrap: advance to next ruled line when exceeding right margin.
+- Page overflow: new page (not yet implemented).
+- Myanmar vertical metrics: line box from font metrics; stacked/below-base marks never clipped.
+- Narrow 6.35 mm ruling: every-other-line placement for Myanmar.
+
+### Paper-Size Calibration
+- Supported sizes: A3, A4, A5, A6, B5, LETTER, LEGAL.
+- B5 added (176x250mm) to both Kotlin `PaperSizes` and C++ `applySizeId()`.
+- A4 remains default.
+- Write-zoom target: ≈44.7dp ruling gap (minimum comfortable writing target).
+- Calibration based on physical paper dimensions and display density, not arbitrary screen-pixel constants.
+
+### Caret Overlay
+- Separate draw call after text layer; no document re-render.
+- Blinking at ≈500ms interval (2 Hz).
+- Position follows cursor cluster position on ruled baseline.
+- `pad0 = 1.0f` flag on caret instance for potential shader differentiation.
+
+### Incremental Updates
+- `needsReshape` flag: reshape (shape + atlas + upload) only when text changes.
+- Coalesced during Choreographer render loop (one reshape per frame max).
+- Caret blink does NOT trigger reshape or re-render.
+- No per-keystroke GPU resource allocation (instance buffer reused, atlas reused).
+
+### CI Fix: Vulkan Header for C Unit Tests
+- `cxx-unit-tests` job now sets up Android SDK + NDK.
+- `libvulkan-dev` installed for system Vulkan headers.
+- NDK Vulkan include path (`$ANDROID_NDK_ROOT/source/android/vulkan/include`) added to clang.
+- `noat_vulkan_test.c` and `noat_engine_test.c` compiled (compile-only verification).
+- `app/src/main/cpp/noat_vulkan.h` created with C type declarations for dlsym API.
+
+### Fonts
+- Noto Sans Myanmar VF (SIL OFL): Myanmar shaping + rasterization.
+- Patrick Hand (SIL OFL): Latin handwriting appearance.
+- Bundled in `app/src/main/assets/fonts/`; fetched in CI via `tools/ci_fonts.sh`.
+- No system font substitution.
+
 

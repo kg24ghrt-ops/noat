@@ -17,6 +17,18 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- IME input target: hidden EditText that receives keyboard input.
+         Forwarded to PaperLib text document. Not visible to user. -->
+    <EditText
+        android:id="@+id/ime_input"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:imeOptions="flagNoExtractUi|flagNoFullscreen"
+        android:inputType="textMultiLine|textImeMultiLine"
+        android:visibility="invisible" />
+
     <!-- Paper size button: cycles through real stationery sizes (next to the + FAB) -->
     <Button
         android:id="@+id/size_button"

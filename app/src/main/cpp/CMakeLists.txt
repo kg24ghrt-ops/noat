@@ -18,12 +18,17 @@ find_library(EGL_LIBRARY NAMES EGL REQUIRED)
 add_library(paper-engine SHARED
     renderer.cpp
     noat_jni.cpp
+    text_shaper.cpp
+    shape_run.cpp
+    sdf_atlas.cpp
+    text_document.cpp
     paper_wear_spv.h
 )
 
 target_include_directories(paper-engine PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${THIRD_PARTY}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../native/paper-headless
 )
 
 target_link_libraries(paper-engine PRIVATE
@@ -32,6 +37,16 @@ target_link_libraries(paper-engine PRIVATE
     ${EGL_LIBRARY}
     -static-libstdc++
 )
+
+# HarfBuzz (complex-script shaping) - wired but inactive until a font asset and
+# an NDK HarfBuzz build step are approved. Guards keep the APK lane unchanged.
+if(DEFINED HARFBUZZ_LIBRARY AND HARFBUZZ_LIBRARY)
+    target_link_libraries(paper-engine PRIVATE ${HARFBUZZ_LIBRARY})
+    if(DEFINED HARFBUZZ_INCLUDE_DIR AND HARFBUZZ_INCLUDE_DIR)
+        target_include_directories(paper-engine PRIVATE ${HARFBUZZ_INCLUDE_DIR})
+    endif()
+    target_compile_definitions(paper-engine PRIVATE NOAT_HAVE_HARFBUZZ=1)
+endif()
 
 set_target_properties(paper-engine PROPERTIES
     LINK_FLAGS "-s"

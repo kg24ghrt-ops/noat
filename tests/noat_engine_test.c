@@ -46,14 +46,14 @@ typedef VkPipeline (*noat_pipeline_get_handle_fn)(const NoatPipeline *);
 
 typedef NoatRenderer *(*noat_renderer_create_fn)(void);
 typedef void (*noat_renderer_destroy_fn)(NoatRenderer *);
-typedef int (*noat_renderer_init_fn)(NoatRenderer *, ANativeWindow *);
+typedef int (*noat_renderer_init_fn)(NoatRenderer *, struct ANativeWindow *);
 typedef void (*noat_renderer_resize_fn)(NoatRenderer *, int, int);
 typedef void (*noat_renderer_render_frame_fn)(NoatRenderer *);
 typedef void (*noat_renderer_shutdown_fn)(NoatRenderer *);
 
-typedef const NoatPaperSize *(*noat_paper_default_size_fn)(void);
-typedef const NoatPaperSize *(*noat_paper_find_size_fn)(const char *);
-typedef void (*noat_paper_compute_quad_fn)(const NoatPaperSize *, float, float, float *, float *);
+typedef const PaperSize *(*noat_paper_default_size_fn)(void);
+typedef const PaperSize *(*noat_paper_find_size_fn)(const char *);
+typedef void (*noat_paper_compute_quad_fn)(const PaperSize *, float, float, float *, float *);
 
 static const char *vk_result_str(VkResult r) {
     static const char *s[] = {
@@ -163,7 +163,7 @@ int main(void) {
      * Test 1: Paper geometry via library
      * ----------------------------------------------------------- */
     printf("Test 1: Paper geometry\n");
-    const NoatPaperSize *a4 = paper_default();
+    const PaperSize *a4 = paper_default();
     if (!a4 || strcmp(a4->id, "A4") != 0) {
         printf("  FAIL: default size not A4\n");
         failures++;
@@ -172,7 +172,7 @@ int main(void) {
                a4->id, a4->width_mm, a4->height_mm);
     }
 
-    const NoatPaperSize *legal = paper_find("LEGAL");
+    const PaperSize *legal = paper_find("LEGAL");
     if (!legal || legal->width_mm != 215.9f || legal->height_mm != 355.6f) {
         printf("  FAIL: LEGAL size wrong\n");
         failures++;
