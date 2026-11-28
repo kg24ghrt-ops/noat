@@ -189,7 +189,7 @@ jobs:
           )
           for so in app/src/main/jniLibs/*/libpaper-engine.so; do
             echo "=== Checking $so ==="
-            DYN_SYMS="$("$LLVM_NM" --defined-only "$so" | grep "Java_com_example_noat_PaperLib_" || true)"
+            DYN_SYMS="$("$LLVM_NM" --dynamic --defined-only "$so" | grep "Java_com_example_noat_PaperLib_" || true)"
             echo "$DYN_SYMS" | sed 's/^/  /'
             MISSING=0
             for sym in "${REQUIRED_EXPORTS[@]}"; do
@@ -249,7 +249,7 @@ jobs:
             "Java_com_example_noat_PaperLib_paperTextSetComposing"
             "Java_com_example_noat_PaperLib_paperTextClearComposing"
           )
-          DYN_SYMS="$("$LLVM_NM" --defined-only /tmp/apk-verify/lib/arm64-v8a/libpaper-engine.so | grep "Java_com_example_noat_PaperLib_" || true)"
+          DYN_SYMS="$("$LLVM_NM" --dynamic --defined-only /tmp/apk-verify/lib/arm64-v8a/libpaper-engine.so | grep "Java_com_example_noat_PaperLib_" || true)"
           echo "$DYN_SYMS" | sed 's/^/  /'
           MISSING=0
           for sym in "${REQUIRED_EXPORTS[@]}"; do

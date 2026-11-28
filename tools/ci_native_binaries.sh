@@ -111,7 +111,7 @@ for ABI in arm64-v8a x86_64; do
   # Validate JNI exports - check dynamic symbol table after stripping.
   echo "[ci_native_binaries] Validating JNI exports for $ABI:"
   LLVM_NM="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
-  DYN_SYMS="$("$LLVM_NM" --defined-only "$SO_FILE" | grep "Java_com_example_noat_PaperLib_" || true)"
+  DYN_SYMS="$("$LLVM_NM" --dynamic --defined-only "$SO_FILE" | grep "Java_com_example_noat_PaperLib_" || true)"
 
   # Print all found JNI exports.
   echo "$DYN_SYMS" | sed 's/^/  /'
