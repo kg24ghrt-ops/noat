@@ -3,9 +3,12 @@ package com.example.noat
 import android.content.Context
 import android.os.Bundle
 import android.text.Editable
+import android.text.InputType
 import android.text.TextWatcher
+import android.util.Log
 import android.view.KeyEvent
 import android.view.View
+import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.view.Choreographer
@@ -56,6 +59,18 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
     private var gpuInstanceCount = 0
 
     private var needsReshape = false
+    private var isComposing = false
+    private var updatingFromNative = false
+
+    // Paper size dimensions for layout.
+    private var currentPaperWidthMm = 210.0f
+    private var currentPaperHeightMm = 297.0f
+    private var currentRuleGapMm = 7.1f
+    private var currentRuleTopMm = 25.4f
+    private var currentMarginXMm = 31.75f
+
+    // Keep reference to TextWatcher for proper removal.
+    private var textWatcher: TextWatcher? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +108,13 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         imeInput = findViewById(R.id.ime_input)
         imeInput.isFocusable = true
         imeInput.isFocusableInTouchMode = true
+        imeInput.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_IME_MULTI_LINE
+        imeInput.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
+        
+        // Replace default InputConnection with our custom one.
+        val customInputConnection = PaperInputConnection(imeInput, false)
+        imeInput.setOnCreateInputConnectionListener { customInputConnection }
+        
         imeInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE ||
                 actionId == EditorInfo.IME_ACTION_NEXT ||
@@ -103,23 +125,23 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
             } else false
         }
 
-        imeInput.addTextChangedListener(object : TextWatcher {
+        // Use TextWatcher as backup for composition events that don't go through InputConnection.
+        textWatcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
 
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                if (s == null) return
+                if (s == null || isComposing || updatingFromNative) return
                 val newText = s.toString()
-                if (newText.length > documentText.length) {
-                    val inserted = newText.substring(documentCursor.coerceAtMost(documentText.length).. (documentCursor + newText.length - documentText.length).coerceAtMost(newText.length))
-                    documentText = newText
-                    documentCursor += inserted.length
-                    paperLib.paperTextInsert(inserted)
-                    needsReshape = true
+                if (newText != documentText) {
+                    // Full sync: native is authoritative, but we also need to sync Kotlin state.
+                    // For non-composing text changes, we sync from EditText to native.
+                    syncFromEditText(newText)
                 }
             }
 
             override fun afterTextChanged(s: Editable?) {}
-        })
+        }
+        imeInput.addTextChangedListener(textWatcher!!)
 
         paperLib.paperSetAssetManager(assets)
         paperLib.paperSetSize(DefaultPaperSizeId)
@@ -143,22 +165,40 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
             val size = PaperSizes[currentSizeIndex]
             sizeButton.text = size.name
             paperLib.paperSetSize(size.id)
+            updatePaperDimensions(size)
             needsReshape = true
         }
     }
 
+    private fun updatePaperDimensions(size: PaperSize) {
+        currentPaperWidthMm = size.widthMm
+        currentPaperHeightMm = size.heightMm
+    }
+
+    private fun syncFromEditText(newText: String) {
+        documentText = newText
+        // Update native document to match.
+        paperLib.paperTextSetDocument(newText)
+        // Cursor position from EditText selection.
+        val selStart = imeInput.selectionStart
+        val selEnd = imeInput.selectionEnd
+        if (selStart >= 0 && selStart <= documentText.length) {
+            documentCursor = selStart
+            paperLib.paperTextSetCursor(documentCursor)
+        }
+        needsReshape = true
+    }
+
     private fun commitEnter() {
-        documentText = documentText.take(documentCursor) + "\n" + documentText.drop(documentCursor)
-        documentCursor++
         paperLib.paperTextEnter()
+        // Sync native cursor back to Kotlin.
+        documentCursor = paperLib.paperTextGetCursorCluster()
         needsReshape = true
     }
 
     private fun commitBackspace() {
-        if (documentCursor == 0) return
-        documentText = documentText.take(documentCursor - 1) + documentText.drop(documentCursor)
-        documentCursor--
         paperLib.paperTextBackspace()
+        documentCursor = paperLib.paperTextGetCursorCluster()
         needsReshape = true
     }
 
@@ -239,13 +279,14 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
     }
 
     private fun buildGpuInstances(useMyanmar: Boolean) {
-        val mmToPxX = resources.displayMetrics.widthPixels.toFloat() / 210f
-        val mmToPxY = resources.displayMetrics.heightPixels.toFloat() / 297f
-        val ruleGapPx = 7.1f * mmToPxY
-        val ruleTopPx = 25.4f * mmToPxY
-        val marginXPx = 31.75f * mmToPxX
+        // Use actual paper dimensions for mm-to-px conversion.
+        val mmToPxX = resources.displayMetrics.widthPixels.toFloat() / currentPaperWidthMm
+        val mmToPxY = resources.displayMetrics.heightPixels.toFloat() / currentPaperHeightMm
+        val ruleGapPx = currentRuleGapMm * mmToPxY
+        val ruleTopPx = currentRuleTopMm * mmToPxY
+        val marginXPx = currentMarginXMm * mmToPxX
         val fontSizePx = 24.0f
-        val lineWidthPx = (210f - 31.75f * 2f) * mmToPxX
+        val lineWidthPx = (currentPaperWidthMm - currentMarginXMm * 2f) * mmToPxX
 
         val instances = mutableListOf<Float>()
         var lineIdx = 0
@@ -367,6 +408,169 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
 
     private fun stopRenderLoop() {
         isRendering = false
+    }
+
+    // Custom InputConnection that forwards all text changes to native.
+    inner class PaperInputConnection(private val targetView: View, private val fullEditor: Boolean) : BaseInputConnection(targetView, fullEditor) {
+
+        override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
+            if (text == null) return false
+            isComposing = false
+            val str = text.toString()
+            Log.d("PaperInput", "commitText: '$str', cursor=$newCursorPosition")
+            
+            // Forward to native.
+            paperLib.paperTextInsert(str)
+            
+            // Sync Kotlin state from native.
+            documentText = paperLib.paperTextGetDocument()
+            documentCursor = paperLib.paperTextGetCursorCluster()
+            
+            // Update EditText to match.
+            updateEditTextFromNative()
+            needsReshape = true
+            return true
+        }
+
+        override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+            Log.d("PaperInput", "deleteSurroundingText: before=$beforeLength, after=$afterLength")
+            if (beforeLength > 0) {
+                repeat(beforeLength) { paperLib.paperTextBackspace() }
+            }
+            if (afterLength > 0) {
+                repeat(afterLength) { paperLib.paperTextDeleteForward() }
+            }
+            documentText = paperLib.paperTextGetDocument()
+            documentCursor = paperLib.paperTextGetCursorCluster()
+            updateEditTextFromNative()
+            needsReshape = true
+            return true
+        }
+
+        override fun sendKeyEvent(event: KeyEvent): Boolean {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                when (event.keyCode) {
+                    KeyEvent.KEYCODE_DEL -> {
+                        commitBackspace()
+                        return true
+                    }
+                    KeyEvent.KEYCODE_ENTER -> {
+                        commitEnter()
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        paperLib.paperTextMoveLeft()
+                        documentCursor = paperLib.paperTextGetCursorCluster()
+                        updateEditTextFromNative()
+                        needsReshape = true
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        paperLib.paperTextMoveRight()
+                        documentCursor = paperLib.paperTextGetCursorCluster()
+                        updateEditTextFromNative()
+                        needsReshape = true
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        paperLib.paperTextMoveUp()
+                        documentCursor = paperLib.paperTextGetCursorCluster()
+                        updateEditTextFromNative()
+                        needsReshape = true
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        paperLib.paperTextMoveDown()
+                        documentCursor = paperLib.paperTextGetCursorCluster()
+                        updateEditTextFromNative()
+                        needsReshape = true
+                        return true
+                    }
+                    KeyEvent.KEYCODE_MOVE_HOME -> {
+                        paperLib.paperTextMoveToLineStart()
+                        documentCursor = paperLib.paperTextGetCursorCluster()
+                        updateEditTextFromNative()
+                        needsReshape = true
+                        return true
+                    }
+                    KeyEvent.KEYCODE_MOVE_END -> {
+                        paperLib.paperTextMoveToLineEnd()
+                        documentCursor = paperLib.paperTextGetCursorCluster()
+                        updateEditTextFromNative()
+                        needsReshape = true
+                        return true
+                    }
+                }
+            }
+            return super.sendKeyEvent(event)
+        }
+
+        override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
+            if (text == null) {
+                isComposing = false
+                paperLib.paperTextClearComposing()
+            } else {
+                isComposing = true
+                val str = text.toString()
+                Log.d("PaperInput", "setComposingText: '$str', cursor=$newCursorPosition")
+                paperLib.paperTextSetComposing(str)
+            }
+            return true
+        }
+
+        override fun finishComposingText(): Boolean {
+            isComposing = false
+            paperLib.paperTextClearComposing()
+            documentText = paperLib.paperTextGetDocument()
+            documentCursor = paperLib.paperTextGetCursorCluster()
+            updateEditTextFromNative()
+            needsReshape = true
+            return true
+        }
+
+        override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence? {
+            val start = max(0, documentCursor - n)
+            return documentText.substring(start, documentCursor)
+        }
+
+        override fun getTextAfterCursor(n: Int, flags: Int): CharSequence? {
+            val end = min(documentText.length, documentCursor + n)
+            return documentText.substring(documentCursor, end)
+        }
+
+        override fun getSelectedText(flags: Int): CharSequence? {
+            val selStart = imeInput.selectionStart
+            val selEnd = imeInput.selectionEnd
+            if (selStart >= 0 && selEnd >= 0 && selStart != selEnd) {
+                val start = min(selStart, selEnd)
+                val end = max(selStart, selEnd)
+                return documentText.substring(start, end)
+            }
+            return null
+        }
+
+        override fun performEditorAction(actionId: Int): Boolean {
+            if (actionId == EditorInfo.IME_ACTION_DONE ||
+                actionId == EditorInfo.IME_ACTION_NEXT ||
+                actionId == EditorInfo.IME_ACTION_UNSPECIFIED
+            ) {
+                commitEnter()
+                return true
+            }
+            return super.performEditorAction(actionId)
+        }
+    }
+
+    private fun updateEditTextFromNative() {
+        updatingFromNative = true
+        documentText = paperLib.paperTextGetDocument()
+        documentCursor = paperLib.paperTextGetCursorCluster()
+        // Update EditText text and cursor without triggering TextWatcher.
+        textWatcher?.let { imeInput.removeTextChangedListener(it) }
+        imeInput.setText(documentText)
+        imeInput.setSelection(documentCursor.coerceIn(0, documentText.length))
+        textWatcher?.let { imeInput.addTextChangedListener(it) }
+        updatingFromNative = false
     }
 
     enum class PaperMaterialPresets {

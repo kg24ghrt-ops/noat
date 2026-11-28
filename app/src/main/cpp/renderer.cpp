@@ -999,15 +999,23 @@ void AppRenderer::textSetDocument(const char* utf8, uint32_t byte_length) {
         m_document.insert_utf8(utf8, byte_length);
     }
     m_document.set_font_size_px(24.0f);
-    m_document.set_paper_dims(210.0f, 297.0f); // A4 default
+    m_document.set_paper_dims(m_paper_width_mm, m_paper_height_mm);
     m_document.set_screen_dims(static_cast<float>(m_width),
                                static_cast<float>(m_height));
-    m_document.set_rule_gap_mm(7.1f);
-    m_document.set_rule_top_mm(25.4f);
-    m_document.set_margin_x_mm(31.75f);
+    m_document.set_rule_gap_mm(m_rule_gap_mm);
+    m_document.set_rule_top_mm(m_rule_top_mm);
+    m_document.set_margin_x_mm(m_margin_x_mm);
     m_document.relayout();
     m_atlas_dirty = true;
     m_instances_dirty = true;
+}
+
+std::string AppRenderer::textGetDocument() const {
+    return m_document.utf8();
+}
+
+uint32_t AppRenderer::textGetCursorCluster() const {
+    return m_document.cursor();
 }
 
 void AppRenderer::textInsert(const char* utf8, uint32_t byte_length) {
@@ -1080,6 +1088,22 @@ bool AppRenderer::caretUpdate(float dt_seconds) {
 void AppRenderer::caretResetBlink() {
     m_caret_visible = true;
     m_caret_blink_timer = 0.0f;
+}
+
+void AppRenderer::setPaperDims(float width_mm, float height_mm, float rule_gap_mm, float rule_top_mm, float margin_x_mm) {
+    m_paper_width_mm = width_mm;
+    m_paper_height_mm = height_mm;
+    m_rule_gap_mm = rule_gap_mm;
+    m_rule_top_mm = rule_top_mm;
+    m_margin_x_mm = margin_x_mm;
+    // Update the document with new paper dimensions and relayout.
+    m_document.set_paper_dims(width_mm, height_mm);
+    m_document.set_rule_gap_mm(rule_gap_mm);
+    m_document.set_rule_top_mm(rule_top_mm);
+    m_document.set_margin_x_mm(margin_x_mm);
+    m_document.relayout();
+    m_atlas_dirty = true;
+    m_instances_dirty = true;
 }
 
 // ---- Text pipeline integration ----

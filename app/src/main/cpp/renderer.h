@@ -41,6 +41,8 @@ public:
     // ---- Text document editing ----
     // Set committed text (replaces all content). Relayouts immediately.
     void textSetDocument(const char* utf8, uint32_t byte_length);
+    // Get current committed text as UTF-8.
+    std::string textGetDocument() const;
     // Insert UTF-8 at cursor.
     void textInsert(const char* utf8, uint32_t byte_length);
     // Backspace at cursor.
@@ -58,15 +60,16 @@ public:
     void textMoveToLineEnd();
     // Set cursor to a specific cluster index.
     void textSetCursor(uint32_t cluster_index);
-    // IME composing text (not deformed, rendered separately).
-    void textSetComposing(const char* utf8, uint32_t byte_length);
-    void textClearComposing();
-
+    // Get cursor as cluster index.
+    uint32_t textGetCursorCluster() const;
     // Cursor access (for caret rendering on the Kotlin side).
     uint32_t textCursor() const;
     float textCursorX() const;
     float textCursorY() const;
     uint32_t textCursorLine() const;
+    // IME composing text (not deformed, rendered separately).
+    void textSetComposing(const char* utf8, uint32_t byte_length);
+    void textClearComposing();
 
     // ---- Text (handwriting) GPU support ----
     // A positioned, cluster-aware glyph instance ready for the SDF atlas.
@@ -107,6 +110,9 @@ public:
     bool caretVisible() const { return m_caret_visible; }
     // Force caret visibility (e.g. after user interaction).
     void caretResetBlink();
+
+    // Update paper dimensions for text layout.
+    void setPaperDims(float width_mm, float height_mm, float rule_gap_mm, float rule_top_mm, float margin_x_mm);
 
 private:
     bool createInstance();
@@ -199,6 +205,13 @@ private:
     VkSemaphore m_imageAvailableSemaphore{VK_NULL_HANDLE};
     VkSemaphore m_renderFinishedSemaphore{VK_NULL_HANDLE};
     VkFence m_inFlightFence{VK_NULL_HANDLE};
+
+    // Paper dimensions for text layout.
+    float m_paper_width_mm = 210.0f;
+    float m_paper_height_mm = 297.0f;
+    float m_rule_gap_mm = 7.1f;
+    float m_rule_top_mm = 25.4f;
+    float m_margin_x_mm = 31.75f;
 
     uint32_t m_width{0};
     uint32_t m_height{0};

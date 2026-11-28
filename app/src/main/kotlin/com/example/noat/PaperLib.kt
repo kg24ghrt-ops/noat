@@ -74,6 +74,11 @@ class PaperLib {
     external fun paperTextGetCursorLine(): Int
     external fun paperTextSetComposing(text: String): Unit
     external fun paperTextClearComposing(): Unit
+    // New methods for full document sync.
+    external fun paperTextSetDocument(text: String): Unit
+    external fun paperTextGetDocument(): String
+    external fun paperTextGetCursorCluster(): Int
+    external fun paperTextDeleteForward(): Unit
 
     companion object {
         init {

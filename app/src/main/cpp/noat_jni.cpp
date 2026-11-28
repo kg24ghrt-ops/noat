@@ -109,28 +109,35 @@ void applySizeId(const char* sizeId, ParamsMirror& p) {
     p.rule_style = 0.0f;  // college
     p.rule_gap_mm = 7.1f;
     p.rule_top_mm = 25.4f;
+    float paper_w = 210.0f;
+    float paper_h = 297.0f;
     if (std::strcmp(sizeId, "A3") == 0) {
-        p.paper_size_mm_x = 297.0f;
-        p.paper_size_mm_y = 420.0f;
+        paper_w = 297.0f;
+        paper_h = 420.0f;
     } else if (std::strcmp(sizeId, "A4") == 0) {
-        p.paper_size_mm_x = 210.0f;
-        p.paper_size_mm_y = 297.0f;
+        paper_w = 210.0f;
+        paper_h = 297.0f;
     } else if (std::strcmp(sizeId, "A5") == 0) {
-        p.paper_size_mm_x = 148.0f;
-        p.paper_size_mm_y = 210.0f;
+        paper_w = 148.0f;
+        paper_h = 210.0f;
     } else if (std::strcmp(sizeId, "A6") == 0) {
-        p.paper_size_mm_x = 105.0f;
-        p.paper_size_mm_y = 148.0f;
+        paper_w = 105.0f;
+        paper_h = 148.0f;
     } else if (std::strcmp(sizeId, "B5") == 0) {
-        p.paper_size_mm_x = 176.0f;
-        p.paper_size_mm_y = 250.0f;
+        paper_w = 176.0f;
+        paper_h = 250.0f;
     } else if (std::strcmp(sizeId, "LETTER") == 0) {
-        p.paper_size_mm_x = 215.9f;
-        p.paper_size_mm_y = 279.4f;
+        paper_w = 215.9f;
+        paper_h = 279.4f;
     } else if (std::strcmp(sizeId, "LEGAL") == 0) {
-        p.paper_size_mm_x = 215.9f;
-        p.paper_size_mm_y = 355.6f;
+        paper_w = 215.9f;
+        paper_h = 355.6f;
     }
+    p.paper_size_mm_x = paper_w;
+    p.paper_size_mm_y = paper_h;
+    
+    // Update renderer paper dimensions for text layout.
+    renderer().setPaperDims(paper_w, paper_h, p.rule_gap_mm, p.rule_top_mm, p.margin_x_mm);
 }
 
 
@@ -456,6 +463,34 @@ Java_com_example_noat_PaperLib_paperTextGetCursorY(JNIEnv*, jobject) {
 JNIEXPORT jint JNICALL
 Java_com_example_noat_PaperLib_paperTextGetCursorLine(JNIEnv*, jobject) {
     return static_cast<jint>(renderer().textCursorLine());
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextSetDocument(JNIEnv* env, jobject, jstring text) {
+    auto& r = renderer();
+    if (!text) return;
+    const char* c = env->GetStringUTFChars(text, nullptr);
+    if (c) {
+        r.textSetDocument(c, static_cast<uint32_t>(strlen(c)));
+        env->ReleaseStringUTFChars(text, c);
+    }
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_example_noat_PaperLib_paperTextGetDocument(JNIEnv* env, jobject) {
+    auto& r = renderer();
+    std::string doc = r.textGetDocument();
+    return env->NewStringUTF(doc.c_str());
+}
+
+JNIEXPORT jint JNICALL
+Java_com_example_noat_PaperLib_paperTextGetCursorCluster(JNIEnv*, jobject) {
+    return static_cast<jint>(renderer().textGetCursorCluster());
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_noat_PaperLib_paperTextDeleteForward(JNIEnv*, jobject) {
+    renderer().textDeleteForward();
 }
 
 JNIEXPORT void JNICALL
