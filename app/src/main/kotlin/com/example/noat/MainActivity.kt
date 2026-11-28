@@ -51,7 +51,7 @@ class PaperEditText @JvmOverloads constructor(
 class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
 
     private lateinit var vulkanSurface: SurfaceView
-    private lateinit var imeInput: EditText
+    private lateinit var imeInput: PaperEditText
     private val paperLib = PaperLib()
     private var currentPaperIndex = 0
     private var currentSizeIndex = 0
